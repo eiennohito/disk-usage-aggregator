@@ -3,8 +3,10 @@ import os.path as p
 import sys
 import socket
 
+
 class Sender(object):
   """docstring for Sender"""
+
   def __init__(self, sock, host, port):
     super(Sender, self).__init__()
     self.sock = sock
@@ -15,7 +17,7 @@ class Sender(object):
 
   def send(self, msg):
     print msg
-    if (self.can_append(len(msg))):
+    if self.can_append(len(msg)):
       self.append(msg)
     else:
       self.flush()
@@ -30,11 +32,13 @@ class Sender(object):
     return len(self.buffer) + ln < self.frame_sz
 
   def append(self, msg):
-    ln = len(msg)
+    #ln = len(msg)
     self.buffer += msg
+
 
 def fmt_file(server, path, uid, size):
   return "%s\0%s\0%d\0%d\n" % (server, path, uid, size)
+
 
 def main():
   args = sys.argv
@@ -59,7 +63,7 @@ def main():
         totsize += recurse(pth)
       totsize += sz
 
-    #print("%s %d" % (trg, totsize))
+    # print("%s %d" % (trg, totsize))
     st = os.stat(trg)
     print((server, trg, st.st_uid, totsize))
     sndr.send(fmt_file(server, trg, st.st_uid, totsize))
