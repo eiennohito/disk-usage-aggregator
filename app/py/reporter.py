@@ -45,7 +45,7 @@ def main():
   print args
   host = args[1]
   port = int(args[2])
-  server = args[3]
+  mark = args[3]
   target = args[4]
 
   sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
@@ -65,8 +65,8 @@ def main():
 
     # print("%s %d" % (trg, totsize))
     st = os.stat(trg)
-    print((server, trg, st.st_uid, totsize))
-    sndr.send(fmt_file(server, trg, st.st_uid, totsize))
+    print((mark, trg, st.st_uid, totsize))
+    sndr.send(fmt_file(mark, trg, st.st_uid, totsize))
     return totsize
 
   recurse(target)
