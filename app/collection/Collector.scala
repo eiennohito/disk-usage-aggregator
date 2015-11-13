@@ -5,13 +5,12 @@ import java.util.concurrent.atomic.AtomicInteger
 
 import akka.actor.ActorSystem
 import code.io.udp.InfoSink
-import com.google.inject.{Singleton, Binder, Module, Provides}
-import com.typesafe.config.{ConfigFactory, ConfigObject}
+import com.google.inject.{Binder, Module, Provides, Singleton}
+import com.typesafe.config.ConfigFactory
 import com.typesafe.scalalogging.slf4j.{Logger, StrictLogging}
 import org.slf4j.LoggerFactory
 import play.api.Configuration
 
-import scala.collection.mutable
 import scala.collection.mutable.ArrayBuffer
 import scala.concurrent.ExecutionContext
 import scala.io.Codec
