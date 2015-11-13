@@ -1,7 +1,16 @@
-@(message: String)
+@import collection.CollectionTarget
+
+@(items: Seq[CollectionTarget])
 
 @main("Welcome to Play") {
+  <p>This is the collector</p>
 
-    @play20.welcome(message)
-
+  <p>Registered targets:</p>
+  <ul>
+    @for(i <- items) {
+      <li>
+        [@i.hosts.mkString(",")]: @i.pattern
+      </li>
+    }
+  </ul>
 }

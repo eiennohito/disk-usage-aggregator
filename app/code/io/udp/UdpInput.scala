@@ -11,10 +11,10 @@ import scala.concurrent.Promise
   * @author eiennohito
   * @since 2015/10/27
   */
-class UdpInput(port: Int, actual: Promise[InetSocketAddress]) extends Actor with ActorLogging {
+class UdpInput(hostname: String, port: Int, actual: Promise[InetSocketAddress]) extends Actor with ActorLogging {
   import context.system
 
-  IO(Udp) ! Udp.Bind(self, new InetSocketAddress(port))
+  IO(Udp) ! Udp.Bind(self, new InetSocketAddress(hostname, port))
 
   var sock: ActorRef = null
 
