@@ -15,6 +15,8 @@ libraryDependencies ++= Seq(
 
 libraryDependencies += "com.typesafe.scala-logging" % "scala-logging-slf4j_2.11" % "2.1.2"
 
+libraryDependencies += "com.novus" %% "salat" % "1.9.9"
+
 resolvers += "scalaz-bintray" at "http://dl.bintray.com/scalaz/releases"
 
 // Play provides two styles of routers, one expects its actions to be injected, the

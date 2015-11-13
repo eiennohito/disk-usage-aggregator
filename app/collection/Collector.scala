@@ -28,7 +28,7 @@ case class HostConfig(hosts: Seq[String], executorConfig: AllExecutorsConfig) {
 
 case class CollectionInstArgs(hostname: String, port: Int, label: String)
 
-class CollectionTarget(host: HostConfig, target: TargetPattern) {
+class CollectionTarget(val key: String, host: HostConfig, target: TargetPattern) {
   def makeArgs(args: CollectionInstArgs, hostname: String): Seq[String] = {
     val res = new ArrayBuffer[String]()
     host.appendArgs(res, hostname)
@@ -156,6 +156,8 @@ object CollectionRegistry {
         List(name)
       }
 
+
+
       val hostCfg: String => ExecutorConfig = { host =>
         val obj1 = others.getConfig(host).map(_.underlying).getOrElse(ConfigFactory.empty()).withFallback(othersRaw)
         val commands = obj1.getStringList("access.ssh-commands").asScala
@@ -167,13 +169,16 @@ object CollectionRegistry {
 
       val aec = new AllExecutorsConfig(hostCfg)
 
-      if (obj.hasPath("any-host") && obj.getBoolean("any-host")) {
+      val anyHost = obj.hasPath("any-host") && obj.getBoolean("any-host")
+
+
+      if (anyHost) {
         val host = HostConfig(hosts, aec)
-        result += new CollectionTarget(host, patternObj)
+        result += new CollectionTarget(name, host, patternObj)
       } else {
         for (h <- hosts) {
           val host = HostConfig(List(h), aec)
-          result += new CollectionTarget(host, patternObj)
+          result += new CollectionTarget(s"$name-$h", host, patternObj)
         }
       }
     }
