@@ -224,7 +224,8 @@ class HostModule extends Module {
 
     override def create() = {
       val runId = id.getAndIncrement()
-      new CollectionInstArgs(is.addr.getHostName, is.addr.getPort, runId.toString)
+      val time = (System.nanoTime() >> 14) & 0xffff
+      new CollectionInstArgs(is.addr.getHostName, is.addr.getPort, f"$runId-$time%x")
     }
   }
 
