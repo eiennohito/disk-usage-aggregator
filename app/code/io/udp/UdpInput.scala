@@ -2,7 +2,7 @@ package code.io.udp
 
 import java.net.InetSocketAddress
 
-import akka.actor.{ActorLogging, ActorRef, Actor}
+import akka.actor.{Terminated, ActorLogging, ActorRef, Actor}
 import akka.io.{Udp, IO}
 
 import scala.concurrent.Promise
@@ -11,27 +11,53 @@ import scala.concurrent.Promise
   * @author eiennohito
   * @since 2015/10/27
   */
-class UdpInput(hostname: String, port: Int, actual: Promise[InetSocketAddress]) extends Actor with ActorLogging {
+class UdpInput(hostname: String, port: Int) extends Actor with ActorLogging {
   import context.system
 
   IO(Udp) ! Udp.Bind(self, new InetSocketAddress(hostname, port))
 
   var sock: ActorRef = null
+  var sink: ActorRef = null
+
+  var queries: List[ActorRef] = Nil
+  var boundAddress: InetSocketAddress = null
 
   override def receive = {
     case Udp.Bound(addr) =>
       sock = sender()
-      actual.success(addr)
+      boundAddress = addr
+      log.info(s"server is started on UDP $hostname:$port")
       context.become(ready(sender()))
+      for (q <- queries) {
+        q ! boundAddress
+      }
+      queries = Nil
+    case UdpInput.Register =>
+      sink = sender()
+      context.watch(sink)
+    case UdpInput.AddressQuery =>
+      if (boundAddress != null) {
+        sender() ! boundAddress
+      } else {
+        queries = sender() :: queries
+      }
+    case Terminated(ar) if ar == sink =>
+      sink = null
   }
 
   def ready(socket: ActorRef): Receive = {
+    case UdpInput.Register =>
+      sink = sender()
+    case UdpInput.AddressQuery =>
+      sender() ! boundAddress
     case Udp.Received(data, who) => //data
-      log.info("msg from {},\n{}", who, data.decodeString("utf-8"))
+      sink ! data
     case Udp.Unbind => socket ! Udp.Unbind
     case Udp.Unbound =>
       sock = null
       context.stop(self)
+    case Terminated(ar) if ar == sink =>
+      sink = null
   }
 
   @throws[Exception](classOf[Exception])
@@ -40,4 +66,9 @@ class UdpInput(hostname: String, port: Int, actual: Promise[InetSocketAddress]) 
       sock ! Udp.Unbind
     }
   }
+}
+
+object UdpInput {
+  case object Register
+  case object AddressQuery
 }

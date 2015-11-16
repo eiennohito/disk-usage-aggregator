@@ -1,6 +1,7 @@
-package collection
+package code.collection
 
-import java.io.{BufferedReader, InputStream, InputStreamReader}
+import java.io._
+import java.lang.ProcessBuilder.Redirect
 import java.util.concurrent.atomic.AtomicInteger
 
 import akka.actor.ActorSystem
@@ -9,11 +10,10 @@ import com.google.inject.{Binder, Module, Provides, Singleton}
 import com.typesafe.config.ConfigFactory
 import com.typesafe.scalalogging.slf4j.{Logger, StrictLogging}
 import org.slf4j.LoggerFactory
-import play.api.Configuration
+import play.api.{Configuration, Environment}
 
 import scala.collection.mutable.ArrayBuffer
 import scala.concurrent.ExecutionContext
-import scala.io.Codec
 import scala.util.Random
 
 /**
@@ -28,7 +28,7 @@ case class HostConfig(hosts: Seq[String], executorConfig: AllExecutorsConfig) {
 
 case class CollectionInstArgs(hostname: String, port: Int, label: String)
 
-class CollectionTarget(val key: String, host: HostConfig, target: TargetPattern) {
+class CollectionTarget(val key: String, host: HostConfig, val target: TargetPattern) {
   def makeArgs(args: CollectionInstArgs, hostname: String): Seq[String] = {
     val res = new ArrayBuffer[String]()
     host.appendArgs(res, hostname)
@@ -52,27 +52,27 @@ class CollectionTarget(val key: String, host: HostConfig, target: TargetPattern)
   def pattern = target.raw
 }
 
-case class TargetPattern(raw: String, prefix: String)
+case class TargetPattern(raw: String, prefix: String, pos: Int)
 
 object TargetPattern {
   def create(pattern: String) = {
-    val target = pattern.split("/").takeWhile(!_.startsWith(":")).mkString("/")
-    new TargetPattern(pattern, target)
+    val split = pattern.split("/")
+    val target = split.takeWhile(!_.startsWith(":")).mkString("/")
+    new TargetPattern(pattern, target, split.indexWhere(_.startsWith(":")))
   }
 }
 
-class ProcessExecutor(pythonScript: Array[Byte], executor: ExecutionContext) extends StrictLogging {
+class ProcessLauncher(pythonScript: File, executor: ExecutionContext) extends StrictLogging {
   def launch(target: CollectionTarget, inst: CollectionInstArgs): Process = {
     val pbldr = new ProcessBuilder()
 
     val host = target.selectHostname()
 
     pbldr.command(target.makeArgs(inst, host): _*)
+    pbldr.redirectError(Redirect.PIPE)
+    pbldr.redirectOutput(Redirect.PIPE)
+    pbldr.redirectInput(pythonScript)
     val process = pbldr.start()
-    val stream = process.getOutputStream
-    stream.write(pythonScript)
-    stream.flush()
-    stream.close()
 
     executor.execute(streamWriter(process.getInputStream, host + "-out"))
     executor.execute(streamWriter(process.getErrorStream, host + "-err"))
@@ -82,7 +82,7 @@ class ProcessExecutor(pythonScript: Array[Byte], executor: ExecutionContext) ext
 
   private def streamWriter(input: InputStream, marker: String): Runnable = {
     new Runnable {
-      val logger = Logger(LoggerFactory.getLogger(s"subprocess.$marker"))
+      val logger = Logger(LoggerFactory.getLogger(s"subp.$marker"))
 
       override def run() = {
         try {
@@ -92,6 +92,11 @@ class ProcessExecutor(pythonScript: Array[Byte], executor: ExecutionContext) ext
             logger.info(s"$line")
             line = isr.readLine() //blocks
           }
+        } catch {
+          case e: IOException =>
+            if (e.getMessage != "Stream closed") {
+              logger.warn("some exception", e)
+            }
         } finally {
           input.close()
         }
@@ -159,7 +164,7 @@ object CollectionRegistry {
 
 
       val hostCfg: String => ExecutorConfig = { host =>
-        val obj1 = others.getConfig(host).map(_.underlying).getOrElse(ConfigFactory.empty()).withFallback(othersRaw)
+        val obj1 = others.getConfig(host).map(_.underlying).getOrElse(ConfigFactory.empty()).withFallback(default.underlying)
         val commands = obj1.getStringList("access.ssh-commands").asScala
         val username = if (obj1.hasPath("access.username"))
           Some(obj1.getString("access.username"))
@@ -178,7 +183,7 @@ object CollectionRegistry {
       } else {
         for (h <- hosts) {
           val host = HostConfig(List(h), aec)
-          result += new CollectionTarget(s"$name-$h", host, patternObj)
+          result += new CollectionTarget(s"$h-$name", host, patternObj)
         }
       }
     }
@@ -198,12 +203,12 @@ class HostModule extends Module {
   @Provides
   @Singleton
   def executor(
-    asys: ActorSystem
-  ): ProcessExecutor = {
-    val url = getClass.getClassLoader.getResource("/py/reporter.py")
-    val bytes = scala.io.Source.fromURL(url)(Codec.UTF8).mkString.getBytes("utf-8")
+    asys: ActorSystem,
+    env: Environment
+  ): ProcessLauncher = {
+    val file = env.getFile("/public/python/reporter.py")
     val dispatcher = asys.dispatchers.lookup("stream-reader-dispatcher")
-    new ProcessExecutor(bytes, dispatcher)
+    new ProcessLauncher(file, dispatcher)
   }
 
   @Provides

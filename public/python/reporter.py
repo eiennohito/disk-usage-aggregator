@@ -3,20 +3,18 @@ import os.path as p
 import sys
 import socket
 
-
 class Sender(object):
-  """docstring for Sender"""
 
   def __init__(self, sock, host, port):
     super(Sender, self).__init__()
     self.sock = sock
     self.host = host
     self.port = port
-    self.frame_sz = 500
+    self.frame_sz = 1000
     self.buffer = ""
 
   def send(self, msg):
-    print msg
+    #print msg
     if self.can_append(len(msg)):
       self.append(msg)
     else:
@@ -25,7 +23,7 @@ class Sender(object):
 
   def flush(self):
     sz = self.sock.sendto(self.buffer, (self.host, self.port))
-    print("sent %d bytes" % sz)
+    #print("sent %d bytes" % sz)
     self.buffer = ""
 
   def can_append(self, ln):
@@ -53,19 +51,26 @@ def main():
   sndr = Sender(sock, host, port)
 
   def recurse(trg):
-    chldr = os.listdir(trg)
+    chldr = []
+    try:
+      chldr = os.listdir(trg)
+    except OSError as e:
+      return 0
     totsize = 0
     for cp in chldr:
       pth = p.join(trg, cp)
-      sobj = p.isdir(pth)
-      sz = p.getsize(pth)
-      if sobj:
+      isitdir = p.isdir(pth)
+      sz = 0
+      isitlink = p.islink(pth)
+      if not isitlink:
+        sz = p.getsize(pth)
+      if isitdir and not isitlink:
         totsize += recurse(pth)
       totsize += sz
 
     # print("%s %d" % (trg, totsize))
-    st = os.stat(trg)
-    print((mark, trg, st.st_uid, totsize))
+    st = os.lstat(trg)
+    #print((mark, trg, st.st_uid, totsize))
     sndr.send(fmt_file(mark, trg, st.st_uid, totsize))
     return totsize
 
@@ -73,5 +78,6 @@ def main():
   sndr.flush()
 
 
-if __name__ == '__main__':
-  main()
+#print "running"
+main()
+sys.exit(0)

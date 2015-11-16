@@ -15,6 +15,7 @@
   <logger name="play" level="INFO" />
   <logger name="application" level="DEBUG" />
   <logger name="code" level="DEBUG"/>
+  <logger name="subp" level="DEBUG"/>
 
   <root level="ERROR">
     <appender-ref ref="STDOUT" />

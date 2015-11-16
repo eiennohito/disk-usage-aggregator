@@ -29,6 +29,9 @@ class InfoSinkModule extends Module {
     binder.bind(classOf[InfoSink]).to(classOf[InfoSinkImpl]).asEagerSingleton()
   }
 
+  import akka.pattern.ask
+  import scala.concurrent.duration._
+
   @Provides
   @Singleton
   def infoSink(
@@ -37,10 +40,9 @@ class InfoSinkModule extends Module {
   ): InfoSinkImpl = {
     val port = cfg.getInt("my.port").getOrElse(0)
     val hostname = cfg.getString("my.hostname").getOrElse(InetAddress.getLocalHost.getHostAddress)
-    val addrP = Promise[InetSocketAddress]()
-    val aref = asys.actorOf(Props(new UdpInput(hostname, port, addrP)))
-    import scala.concurrent.duration._
-    val addr = Await.result(addrP.future, 10.seconds)
+    val aref = asys.actorOf(Props(new UdpInput(hostname, port)))
+    val fut = aref.ask(UdpInput.AddressQuery)(10.seconds).mapTo[InetSocketAddress]
+    val addr = Await.result(fut, 10.seconds)
     new InfoSinkImpl(hostname, port, addr, aref)
   }
 }

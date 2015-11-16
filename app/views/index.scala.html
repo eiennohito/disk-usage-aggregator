@@ -1,4 +1,4 @@
-@import collection.CollectionTarget
+@import code.collection.CollectionTarget
 
 @(items: Seq[CollectionTarget])
 
@@ -9,6 +9,9 @@
   <ul>
     @for(i <- items) {
       <li>
+        <a href="@routes.Application.reload(i.key)">
+          R
+        </a>
         [@i.hosts.mkString(",")]: @i.pattern
       </li>
     }
