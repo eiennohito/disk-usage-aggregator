@@ -7,6 +7,7 @@ import akka.actor._
 import akka.util.{ByteString, Timeout}
 import code.io.udp.{InfoSink, UdpInput}
 import com.google.inject.{Binder, Module, Provides, Singleton}
+import com.mongodb.casbah.commons.MongoDBObject
 import com.novus.salat.Context
 import com.novus.salat.dao.{SalatDAO, DAO}
 
@@ -74,6 +75,8 @@ class Collector(mark: String, ct: CollectionTarget, ded: DirectoryEntryDao) exte
 
   val idx = ct.target.pos
 
+  ded.dropKey(ct.key)
+
   override def receive = {
     case CollectionEvent(_, path, uid, size) =>
       if (idx != -1) {
@@ -107,9 +110,49 @@ import com.novus.salat.annotations._
 
 case class DirectoryEntry(@Key("_id") id: Long, parent: Option[Long], key: String, name: String, size: Long)
 
+case class ByKey(@Key("_id")key: String, total: Long)
+
 trait DirectoryEntryDao extends DAO[DirectoryEntry, Long] {
+  def dropKey(key: String) = {
+    val cmd = MongoDBObject(
+      "key" -> key
+    )
+    this.remove(cmd)
+  }
+
   val start = new AtomicLong(this.count())
   def makeId(): Long = start.getAndIncrement()
+
+  implicit def context: Context
+
+  def byKey(): Seq[ByKey] = {
+    val pipeline = Seq(
+      MongoDBObject("$group" -> MongoDBObject(
+        "_id" -> "$key",
+        "total" -> MongoDBObject("$sum" -> "$size")
+      )), MongoDBObject("$sort" -> MongoDBObject(
+        "total" -> -1
+      ))
+    )
+
+    val out = this.collection.aggregate(pipeline)
+    val grater = com.novus.salat.grater[ByKey]
+    out.results.map { o =>  grater.asObject(new MongoDBObject(o)) }.toBuffer
+  }
+
+  def byName(): Seq[ByKey] = {
+    val pipeline = Seq(
+      MongoDBObject("$group" -> MongoDBObject(
+        "_id" -> "$name",
+        "total" -> MongoDBObject("$sum" -> "$size")
+      )), MongoDBObject("$sort" -> MongoDBObject(
+        "total" -> -1
+      ))
+    )
+    val out = this.collection.aggregate(pipeline)
+    val grater = com.novus.salat.grater[ByKey]
+    out.results.map { o =>  grater.asObject(new MongoDBObject(o)) }.toBuffer
+  }
 }
 
 class CollectionModule extends Module {
@@ -121,7 +164,10 @@ class CollectionModule extends Module {
     implicit ctx: Context,
     mongoInstance: MongoInstance
   ): DirectoryEntryDao = {
-    new SalatDAO[DirectoryEntry, Long](mongoInstance.database("direntry")) with DirectoryEntryDao
+    new SalatDAO[DirectoryEntry, Long](mongoInstance.database("direntry")) with DirectoryEntryDao {
+      def context = ctx
+    }
+
   }
 
   @Provides

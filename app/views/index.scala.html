@@ -3,7 +3,9 @@
 @(items: Seq[CollectionTarget])
 
 @main("Welcome to Play") {
-  <p>This is the collector</p>
+  <p>This is the collector.
+    <a href="@routes.Application.stats">Stats</a>.
+  </p>
 
   <p>Registered targets:</p>
   <ul>

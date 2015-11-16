@@ -1,0 +1,25 @@
+@import code.collection.CollectionTarget
+
+@import code.collection.ByKey
+@(byName: Seq[ByKey], byKey: Seq[ByKey])
+
+@main("Welcome to Play") {
+  <p>Stats:</p>
+
+  <div>
+    <div>
+      <ul>
+        @for(n <- byName) {
+          <li>@n.key @code.Sizes.readable(n.total)</li>
+        }
+      </ul>
+    </div>
+    <div>
+      <ul>
+      @for(n <- byKey) {
+        <li>@n.key @code.Sizes.readable(n.total)</li>
+      }
+      </ul>
+    </div>
+  </div>
+}
