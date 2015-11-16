@@ -37,7 +37,7 @@ class CollectorLauncher (
   context.system.scheduler.schedule(5.seconds, 15.seconds, self, Tick)
 
 
-  var running: Seq[(CollectionTarget, Process, String)] = Nil
+  var running: Seq[(CollectionTarget, Process, String, ActorRef)] = Nil
 
   override def receive = {
     case Tick =>
@@ -49,13 +49,13 @@ class CollectorLauncher (
         log.info(s"$cnt slots available, running ${available.size} items")
         val launched = available.flatMap { req =>
           val collectionArgs = cas.create()
-          collectors.makeCollector(Collection.MakeCollector(collectionArgs.label, req))
           val host = req.selectHostname()
           if (running.exists(_._3 == host)) {
             tasks.makeWait(req, 5.minutes)
             Nil
           } else {
-            (req, executor.launch(req, collectionArgs, host), host) :: Nil
+            val aref = collectors.makeCollector(Collection.MakeCollector(collectionArgs.label, req))
+            (req, executor.launch(req, collectionArgs, host), host, aref) :: Nil
           }
         }
         self ! Mark(available)
@@ -65,6 +65,7 @@ class CollectorLauncher (
       }
       val targets = dead.map(_._1)
       tasks.mark(targets)
+      dead.foreach(_._4 ! Collection.CollectionFinished)
   }
 
   @throws[Exception](classOf[Exception])
