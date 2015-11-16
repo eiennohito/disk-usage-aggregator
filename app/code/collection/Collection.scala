@@ -120,7 +120,7 @@ trait DirectoryEntryDao extends DAO[DirectoryEntry, Long] {
     this.remove(cmd)
   }
 
-  val start = new AtomicLong(this.count())
+  val start = new AtomicLong(this.ids().max + 1)
   def makeId(): Long = start.getAndIncrement()
 
   implicit def context: Context
