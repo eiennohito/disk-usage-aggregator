@@ -10,7 +10,7 @@ class Sender(object):
     self.sock = sock
     self.host = host
     self.port = port
-    self.frame_sz = 1000
+    self.frame_sz = 1300
     self.buffer = ""
 
   def send(self, msg):

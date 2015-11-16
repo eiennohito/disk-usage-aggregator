@@ -63,10 +63,8 @@ object TargetPattern {
 }
 
 class ProcessLauncher(pythonScript: File, executor: ExecutionContext) extends StrictLogging {
-  def launch(target: CollectionTarget, inst: CollectionInstArgs): Process = {
+  def launch(target: CollectionTarget, inst: CollectionInstArgs, host: String): Process = {
     val pbldr = new ProcessBuilder()
-
-    val host = target.selectHostname()
 
     pbldr.command(target.makeArgs(inst, host): _*)
     pbldr.redirectError(Redirect.PIPE)

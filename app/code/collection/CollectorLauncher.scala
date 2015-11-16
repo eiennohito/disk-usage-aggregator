@@ -14,6 +14,8 @@ import com.typesafe.scalalogging.slf4j.StrictLogging
 import org.joda.time.DateTime
 import play.api.{Environment, Configuration}
 
+import scala.concurrent.duration.FiniteDuration
+
 /**
   * @author eiennohito
   * @since 2015/11/13
@@ -35,7 +37,7 @@ class CollectorLauncher (
   context.system.scheduler.schedule(5.seconds, 15.seconds, self, Tick)
 
 
-  var running: Seq[(CollectionTarget, Process)] = Nil
+  var running: Seq[(CollectionTarget, Process, String)] = Nil
 
   override def receive = {
     case Tick =>
@@ -45,10 +47,16 @@ class CollectorLauncher (
         val ignore = running.map(_._1).toSet
         val available = tasks.request(cnt, ignore)
         log.info(s"$cnt slots available, running ${available.size} items")
-        val launched = available.map { req =>
+        val launched = available.flatMap { req =>
           val collectionArgs = cas.create()
           collectors.makeCollector(Collection.MakeCollector(collectionArgs.label, req))
-          req -> executor.launch(req, collectionArgs)
+          val host = req.selectHostname()
+          if (running.exists(_._3 == host)) {
+            tasks.makeWait(req, 5.minutes)
+            Nil
+          } else {
+            (req, executor.launch(req, collectionArgs, host), host) :: Nil
+          }
         }
         self ! Mark(available)
         running = alive ++ launched
@@ -143,6 +151,11 @@ class CollectionServiceModule extends Module {
 }
 
 class CollectionTasksService @Inject() (skd: SavedKeyDAO, regs: CollectionRegistry) extends StrictLogging {
+  def makeWait(req: CollectionTarget, minutes: FiniteDuration) = synchronized {
+    val date = DateTime.now().plusMillis(minutes.toMillis.toInt)
+    stored = stored.updated(req.key, date)
+  }
+
   def mark(target: TraversableOnce[CollectionTarget]) = {
     val upDate = DateTime.now().plusDays(1)
     val keys = target.map(_.key -> upDate).toMap
