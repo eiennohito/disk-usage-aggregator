@@ -14,6 +14,7 @@ import com.typesafe.scalalogging.slf4j.StrictLogging
 import org.joda.time.DateTime
 import play.api.{Environment, Configuration}
 
+import scala.collection.mutable
 import scala.concurrent.duration.FiniteDuration
 
 /**
@@ -43,6 +44,8 @@ class CollectorLauncher (
     case Tick =>
       val (alive, dead) = running.partition(_._2.isAlive)
       val cnt = concurrency - alive.length
+      val hosts = new mutable.HashSet[String]()
+      hosts ++= alive.map(_._3)
       if (cnt > 0) {
         val ignore = running.map(_._1).toSet
         val available = tasks.request(cnt, ignore)
@@ -50,11 +53,12 @@ class CollectorLauncher (
         val launched = available.flatMap { req =>
           val collectionArgs = cas.create()
           val host = req.selectHostname()
-          if (running.exists(_._3 == host)) {
+          if (hosts.contains(host)) {
             tasks.makeWait(req, 5.minutes)
             Nil
           } else {
             val aref = collectors.makeCollector(Collection.MakeCollector(collectionArgs.label, req))
+            hosts += host
             (req, executor.launch(req, collectionArgs, host), host, aref) :: Nil
           }
         }
