@@ -63,7 +63,10 @@ def main():
       sz = 0
       isitlink = p.islink(pth)
       if not isitlink:
-        sz = p.getsize(pth)
+        try:
+          sz = p.getsize(pth)
+        except OSError:
+          sz = 0
       if isitdir and not isitlink:
         totsize += recurse(pth)
       totsize += sz

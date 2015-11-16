@@ -158,11 +158,12 @@ class CollectionTasksService @Inject() (skd: SavedKeyDAO, regs: CollectionRegist
   def request(cnt: Int, ignore: Set[CollectionTarget]): Seq[CollectionTarget] = synchronized {
     val updateTarget = DateTime.now()
     val ignoredKeys = ignore.map(_.key)
-    regs.items.view.filter {
+    val data = regs.items.view.filter {
       ct => stored.get(ct.key)
         .map(_.isBefore(updateTarget))
         .getOrElse(true) && !ignoredKeys.contains(ct.key)
-    }
+    }.take(cnt)
+    data.toList
   }
 
   def reset(key: String) = {
