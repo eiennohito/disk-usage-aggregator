@@ -51,6 +51,7 @@ public class CollectorInstance implements Closeable {
       }
       PosixFileAttributeView attrs = Files.getFileAttributeView(target, PosixFileAttributeView.class, LinkOption.NOFOLLOW_LINKS);
       mgr.push(target, total, attrs.getOwner());
+      mgr.flush();
     }
   }
 
@@ -91,7 +92,6 @@ public class CollectorInstance implements Closeable {
     }
 
     void push(Path path, long size, UserPrincipal user) throws IOException {
-      dataBuffer.clear();
       String p = path.toString();
       dataBuffer.put(mark);
       dataBuffer.put((byte)0);
@@ -101,7 +101,6 @@ public class CollectorInstance implements Closeable {
       dataBuffer.put((byte)0);
       dataBuffer.put(String.valueOf(user.hashCode()).getBytes(charset));
       dataBuffer.put((byte)'\n');
-      dataBuffer.flip();
       finish();
     }
 
@@ -128,7 +127,9 @@ public class CollectorInstance implements Closeable {
     }
 
     private void append() {
+      dataBuffer.flip();
       sendBuffer.put(dataBuffer);
+      dataBuffer.clear();
     }
 
     private boolean haveSpace() {
@@ -139,7 +140,6 @@ public class CollectorInstance implements Closeable {
       long total = fileStore.getTotalSpace();
       long free = fileStore.getUnallocatedSpace();
       long used = total - free;
-      dataBuffer.clear();
       dataBuffer.put(mark);
       dataBuffer.put((byte)0);
       dataBuffer.put(String.valueOf(total).getBytes(charset));
