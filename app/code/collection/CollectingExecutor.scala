@@ -110,13 +110,14 @@ class AllExecutorsConfig(hosts: String => ExecutorConfig) {
   }
 }
 
-case class ExecutorConfig(sshCommands: Seq[String], username: Option[String]) {
+case class ExecutorConfig(sshCommands: Seq[String], prepend: Seq[String], username: Option[String]) {
   def appendArgs(res: ArrayBuffer[String], host: String) = {
     sshCommands.foreach(res += _)
     username match {
       case Some(u) => res += s"$u@$host"
       case None => res += host
     }
+    res ++= prepend
   }
 }
 
@@ -164,10 +165,11 @@ object CollectionRegistry {
       val hostCfg: String => ExecutorConfig = { host =>
         val obj1 = others.getConfig(host).map(_.underlying).getOrElse(ConfigFactory.empty()).withFallback(default.underlying)
         val commands = obj1.getStringList("access.ssh-commands").asScala
+        val prepend = obj1.getStringList("access.prepend").asScala
         val username = if (obj1.hasPath("access.username"))
           Some(obj1.getString("access.username"))
         else None
-        ExecutorConfig(commands, username)
+        ExecutorConfig(commands, prepend, username)
       }
 
       val aec = new AllExecutorsConfig(hostCfg)
