@@ -56,7 +56,7 @@ class CollectionRoot(input: ActorRef, ded: DirectoryEntryDao) extends Actor with
       }
     } catch {
       case e: Exception =>
-        log.error(s"could not process event: {}", line, e)
+        log.error(e, "could not process event: {}", line)
         None
     }
   }
