@@ -24,6 +24,8 @@ case class HostConfig(hosts: Seq[String], executorConfig: AllExecutorsConfig) {
   def appendArgs(res: ArrayBuffer[String], target: String) = {
     executorConfig.appendArgs(res, target)
   }
+
+  def useJavaAt(host: String) = executorConfig.useJava(host)
 }
 
 case class CollectionInstArgs(hostname: String, port: Int, label: String)
@@ -32,14 +34,14 @@ class CollectionTarget(val key: String, host: HostConfig, val target: TargetPatt
   def makeArgs(args: CollectionInstArgs, hostname: String): Seq[String] = {
     val res = new ArrayBuffer[String]()
     host.appendArgs(res, hostname)
-    res += "python"
-    res += "-"
     res += args.hostname
     res += args.port.toString
     res += args.label
     res += target.prefix
     res
   }
+
+  def useJava(host: String) = this.host.useJavaAt(host)
 
   def selectHostname(): String = {
     val hosts = host.hosts
@@ -69,7 +71,9 @@ class ProcessLauncher(pythonScript: File, executor: ExecutionContext) extends St
     pbldr.command(target.makeArgs(inst, host): _*)
     pbldr.redirectError(Redirect.PIPE)
     pbldr.redirectOutput(Redirect.PIPE)
-    pbldr.redirectInput(pythonScript)
+    if (!target.useJava(host)) {
+      pbldr.redirectInput(pythonScript)
+    }
     val process = pbldr.start()
 
     executor.execute(streamWriter(process.getInputStream, host + "-out"))
@@ -104,20 +108,22 @@ class ProcessLauncher(pythonScript: File, executor: ExecutionContext) extends St
 }
 
 class AllExecutorsConfig(hosts: String => ExecutorConfig) {
+  def useJava(host: String) = hosts(host).useJava
+
   def appendArgs(res: ArrayBuffer[String], host: String): Unit = {
     val cfg = hosts(host)
     cfg.appendArgs(res, host)
   }
 }
 
-case class ExecutorConfig(sshCommands: Seq[String], prepend: Seq[String], username: Option[String]) {
+case class ExecutorConfig(useJava: Boolean, sshCommands: Seq[String], commands: Seq[String], username: Option[String]) {
   def appendArgs(res: ArrayBuffer[String], host: String) = {
     sshCommands.foreach(res += _)
     username match {
       case Some(u) => res += s"$u@$host"
       case None => res += host
     }
-    res ++= prepend
+    res ++= commands
   }
 }
 
@@ -160,16 +166,15 @@ object CollectionRegistry {
         List(name)
       }
 
-
-
       val hostCfg: String => ExecutorConfig = { host =>
         val obj1 = others.getConfig(host).map(_.underlying).getOrElse(ConfigFactory.empty()).withFallback(default.underlying)
         val commands = obj1.getStringList("access.ssh-commands").asScala
-        val prepend = obj1.getStringList("access.prepend").asScala
+        val prepend = obj1.getStringList("access.commands").asScala
+        val useJava = obj1.getBoolean("access.use-java")
         val username = if (obj1.hasPath("access.username"))
           Some(obj1.getString("access.username"))
         else None
-        ExecutorConfig(commands, prepend, username)
+        ExecutorConfig(useJava, commands, prepend, username)
       }
 
       val aec = new AllExecutorsConfig(hostCfg)
