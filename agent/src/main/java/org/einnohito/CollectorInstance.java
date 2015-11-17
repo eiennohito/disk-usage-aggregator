@@ -9,8 +9,10 @@ import java.nio.ByteBuffer;
 import java.nio.charset.Charset;
 import java.nio.file.*;
 import java.nio.file.attribute.*;
-import java.util.Iterator;
-import java.util.stream.StreamSupport;
+import java.util.concurrent.BlockingDeque;
+import java.util.concurrent.BlockingQueue;
+import java.util.concurrent.ConcurrentLinkedQueue;
+import java.util.concurrent.LinkedBlockingQueue;
 
 /**
  * @author eiennohito
@@ -21,7 +23,7 @@ public class CollectorInstance implements Closeable {
   private final String mark;
   private final Path target;
 
-  public static final int BUFFER_LIMIT = 1400;
+  public static final int BUFFER_LIMIT = 16000;
 
   public CollectorInstance(InetSocketAddress isa, String mark, Path target) {
     this.isa = isa;
@@ -32,7 +34,8 @@ public class CollectorInstance implements Closeable {
 
   public void doWork() throws IOException {
     try (DatagramSocket socket = new DatagramSocket()) {
-      SendManager mgr = new SendManager(socket, isa, mark.getBytes(Charset.forName("utf-8")));
+      Sender sndr = new Sender(socket);
+      SendManager mgr = new SendManager(sndr, isa, mark.getBytes(Charset.forName("utf-8")));
       long total = 0;
       FileStore fileStore = Files.getFileStore(target);
       mgr.pushStore(fileStore);
@@ -49,6 +52,9 @@ public class CollectorInstance implements Closeable {
       PosixFileAttributeView attrs = Files.getFileAttributeView(target, PosixFileAttributeView.class, LinkOption.NOFOLLOW_LINKS);
       mgr.push(target, total, attrs.getOwner());
       mgr.flush();
+      sndr.finish();
+    } catch (InterruptedException e) {
+      e.printStackTrace(System.err);
     }
   }
 
@@ -77,8 +83,64 @@ public class CollectorInstance implements Closeable {
     return result;
   }
 
-  private static class SendManager {
+  private static class SendRequest {
+    private final DatagramPacket packet;
+
+    public SendRequest(DatagramPacket packet) {
+      this.packet = packet;
+    }
+
+    public DatagramPacket getPacket() {
+      return packet;
+    }
+  }
+
+  private static class Sender {
     private final DatagramSocket socket;
+
+    private final BlockingQueue<SendRequest> requests = new LinkedBlockingQueue<>();
+
+    private final Thread sendThread = new Thread(new Runnable() {
+      @Override
+      public void run() {
+        while (true) {
+          try {
+            SendRequest poll = requests.take();
+            DatagramPacket packet = poll.getPacket();
+            if (packet != null) {
+              socket.send(packet);
+            } else {
+              return;
+            }
+          } catch (IOException e) {
+            e.printStackTrace(System.err);
+          } catch (InterruptedException e) {
+            return;
+          }
+        }
+      }
+    });
+
+    Sender(DatagramSocket socket) {
+      this.socket = socket;
+      sendThread.setDaemon(true);
+      sendThread.start();
+    }
+
+    public void finish() throws InterruptedException {
+      requests.add(new SendRequest(null));
+      sendThread.join();
+    }
+
+    public void send(DatagramPacket packet) {
+      if (packet != null) {
+        requests.add(new SendRequest(packet));
+      }
+    }
+  }
+
+  private static class SendManager {
+    private final Sender sender;
     private final InetSocketAddress remote;
     private final byte[] mark;
     private final ByteBuffer sendBuffer = ByteBuffer.allocate(BUFFER_LIMIT);
@@ -86,8 +148,8 @@ public class CollectorInstance implements Closeable {
 
     private final Charset charset = Charset.forName("utf-8");
 
-    SendManager(DatagramSocket socket, InetSocketAddress remote, byte[] mark) {
-      this.socket = socket;
+    SendManager(Sender sender, InetSocketAddress remote, byte[] mark) {
+      this.sender = sender;
       this.remote = remote;
       this.mark = mark;
     }
@@ -126,7 +188,7 @@ public class CollectorInstance implements Closeable {
           send.length,
           remote
       );
-      socket.send(packet);
+      sender.send(packet);
       sendBuffer.clear();
     }
 
