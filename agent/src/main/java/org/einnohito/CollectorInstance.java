@@ -21,7 +21,7 @@ public class CollectorInstance implements Closeable {
   private final String mark;
   private final Path target;
 
-  public static final int BUFFER_LIMIT = 8000;
+  public static final int BUFFER_LIMIT = 1400;
 
   public CollectorInstance(InetSocketAddress isa, String mark, Path target) {
     this.isa = isa;
