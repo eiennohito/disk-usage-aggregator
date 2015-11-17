@@ -8,10 +8,7 @@ import java.net.InetSocketAddress;
 import java.nio.ByteBuffer;
 import java.nio.charset.Charset;
 import java.nio.file.*;
-import java.nio.file.attribute.FileOwnerAttributeView;
-import java.nio.file.attribute.PosixFileAttributeView;
-import java.nio.file.attribute.PosixFileAttributes;
-import java.nio.file.attribute.UserPrincipal;
+import java.nio.file.attribute.*;
 import java.util.Iterator;
 import java.util.stream.StreamSupport;
 
@@ -43,7 +40,7 @@ public class CollectorInstance implements Closeable {
         for (Path item : paths) {
           PosixFileAttributes attrs = Files.readAttributes(item, PosixFileAttributes.class, LinkOption.NOFOLLOW_LINKS);
           if (attrs.isDirectory()) {
-            total += process(item, attrs, mgr);
+            try { total += process(item, attrs, mgr); } catch (AccessDeniedException e) { /*ignore*/ }
           } else {
             total += attrs.size();
           }
@@ -63,7 +60,11 @@ public class CollectorInstance implements Closeable {
         try {
           childAttrs = Files.readAttributes(p, PosixFileAttributes.class, LinkOption.NOFOLLOW_LINKS);
           if (childAttrs.isDirectory()) {
-            result += process(p, childAttrs, mgr);
+            try {
+              result += process(p, childAttrs, mgr);
+            } catch (AccessDeniedException e) {
+              //swallow it
+            }
           } else {
             result += childAttrs.size();
           }
