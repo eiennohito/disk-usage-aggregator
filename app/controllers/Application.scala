@@ -27,4 +27,13 @@ class Application @Inject()(
     Ok(views.html.stats(names, keys))
   }
 
+  def userStats(name: String) = Action {
+    val info = ded.forUser(name)
+    Ok(views.html.detail("user", name, info))
+  }
+
+  def hostStats(name: String) = Action {
+    val info = ded.forKey(name)
+    Ok(views.html.detail("host", name, info))
+  }
 }

@@ -1,0 +1,30 @@
+@import code.collection.CollectionTarget
+
+@import code.collection.ByKey
+@(kind: String, title: String, items: Seq[ByKey])
+
+@main(s"$kind-$title") {
+  <p>
+    Stats for @kind @title.
+    <a href="@routes.Application.stats">Return to all stats</a>.
+  </p>
+
+  <p>Registered targets:</p>
+
+  <table class="table">
+    <thead>
+      <tr>
+        <td>Who</td>
+        <td>How much</td>
+      </tr>
+    </thead>
+    <tbody>
+    @for(i <- items) {
+      <tr>
+        <td>@i.key</td>
+        <td>@code.Sizes.readable(i.total)</td>
+      </tr>
+    }
+    </tbody>
+  </table>
+}

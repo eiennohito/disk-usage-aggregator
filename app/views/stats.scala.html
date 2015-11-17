@@ -1,23 +1,29 @@
-@import code.collection.CollectionTarget
-
 @import code.collection.ByKey
 @(byName: Seq[ByKey], byKey: Seq[ByKey])
 
 @main("Welcome to Play") {
   <p>Stats:</p>
 
-  <div>
-    <div>
+  <div class="row">
+    <div class="col-sm-6">
+      Users:
       <ul>
         @for(n <- byName) {
-          <li>@n.key @code.Sizes.readable(n.total)</li>
+          <li>
+            <a href="@routes.Application.userStats(n.key)">@n.key</a>
+            @code.Sizes.readable(n.total)
+          </li>
         }
       </ul>
     </div>
-    <div>
+    <div class="col-sm-6">
+      Hosts:
       <ul>
       @for(n <- byKey) {
-        <li>@n.key @code.Sizes.readable(n.total)</li>
+        <li>
+          <a href="@routes.Application.hostStats(n.key)">@n.key</a>
+          @code.Sizes.readable(n.total)
+        </li>
       }
       </ul>
     </div>

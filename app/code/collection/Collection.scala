@@ -115,6 +115,22 @@ case class DirectoryEntry(@Key("_id") id: Long, parent: Option[Long], key: Strin
 case class ByKey(@Key("_id")key: String, total: Long)
 
 trait DirectoryEntryDao extends DAO[DirectoryEntry, Long] {
+  def forUser(name: String) = {
+    val cmd = MongoDBObject(
+      "name" -> name
+    )
+    val cursor = this.find(cmd)
+    cursor.map(e => ByKey(e.key, e.size)).toList.sortBy(-_.total)
+  }
+
+  def forKey(key: String) = {
+    val cmd = MongoDBObject(
+      "key" -> key
+    )
+    val cursor = this.find(cmd)
+    cursor.map(e => ByKey(e.name, e.size)).toList.sortBy(-_.total)
+  }
+
   def dropKey(key: String) = {
     val cmd = MongoDBObject(
       "key" -> key
