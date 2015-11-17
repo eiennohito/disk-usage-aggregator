@@ -98,9 +98,9 @@ public class CollectorInstance implements Closeable {
       dataBuffer.put((byte)0);
       dataBuffer.put(p.getBytes(charset));
       dataBuffer.put((byte)0);
-      dataBuffer.put(String.valueOf(size).getBytes(charset));
-      dataBuffer.put((byte)0);
       dataBuffer.put(String.valueOf(user.hashCode()).getBytes(charset));
+      dataBuffer.put((byte)0);
+      dataBuffer.put(String.valueOf(size).getBytes(charset));
       dataBuffer.put((byte)'\n');
       finish();
     }
