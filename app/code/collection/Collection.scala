@@ -18,7 +18,11 @@ import scala.concurrent.Await
   * @author eiennohito
   * @since 2015/11/16
   */
-case class CollectionEvent(mark: String, path: String, uid: Int, size: Long)
+trait CollectionEvent {
+  def mark: String
+}
+case class FilesystemInfo(mark: String, total: Long, used: Long) extends CollectionEvent
+case class DirectoryFinished(mark: String, path: String, uid: Int, size: Long) extends CollectionEvent
 
 class CollectionRoot(input: ActorRef, ded: DirectoryEntryDao) extends Actor with ActorLogging {
 
@@ -30,29 +34,47 @@ class CollectionRoot(input: ActorRef, ded: DirectoryEntryDao) extends Actor with
 
   val collectors = new mutable.HashMap[String, ActorRef]()
 
+  def parseEvent(line: String, parts: Array[String]) = {
+    try {
+      parts.length match {
+        case 3 =>
+          Some(FilesystemInfo(
+            parts(0),
+            parts(1).toLong,
+            parts(2).toLong
+          ))
+        case 4 =>
+          Some(DirectoryFinished(
+            parts(0),
+            parts(1),
+            parts(2).toInt,
+            parts(3).toLong
+          ))
+        case _ =>
+          log.error(s"could not process event: $line")
+          None
+      }
+    } catch {
+      case e: Exception =>
+        log.error(s"could not process event: {}", line, e)
+        None
+    }
+  }
+
   def processInput(bs: ByteString): Unit = {
     val is = bs.iterator.asInputStream
     val rdr = new BufferedReader(new InputStreamReader(is, "utf-8"), 2048)
     var line = rdr.readLine()
     while (line != null) {
       val parts = line.split('\u0000')
-      if (parts.length == 4) {
-        try {
-          val obj = CollectionEvent(
-            parts(0),
-            parts(1),
-            parts(2).toInt,
-            parts(3).toLong
-          )
+      parseEvent(line, parts) match {
+        case Some(obj) =>
           collectors.get(obj.mark) match {
             case Some(a) => a ! obj
             case None =>
               log.warning(s"no actor is registered for mark: ${obj.mark}, ev: $line")
           }
-        } catch {
-          case e: Exception =>
-            log.error(s"could not process event: $line")
-        }
+        case None => //
       }
       line = rdr.readLine()
     }
@@ -78,7 +100,7 @@ class Collector(mark: String, ct: CollectionTarget, ded: DirectoryEntryDao) exte
   ded.dropKey(ct.key)
 
   override def receive = {
-    case CollectionEvent(_, path, uid, size) =>
+    case DirectoryFinished(_, path, uid, size) =>
       if (idx != -1) {
         val items = path.split("/")
         if (items.length == idx + 1) {
@@ -93,6 +115,7 @@ class Collector(mark: String, ct: CollectionTarget, ded: DirectoryEntryDao) exte
           ded.save(entry)
         }
       }
+    case FilesystemInfo(_, total, used) => //ignore now
     case Collection.CollectionFinished =>
       context.parent ! Collection.CollectionFinished
   }
