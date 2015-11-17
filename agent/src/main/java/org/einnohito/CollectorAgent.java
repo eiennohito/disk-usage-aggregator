@@ -18,7 +18,9 @@ public class CollectorAgent {
     String mark = arg[2];
     Path target = Paths.get(arg[3]);
     try (CollectorInstance instance = new CollectorInstance(isa, mark, target)) {
+      System.out.println("doing work with mark " + mark + " on " + target);
       instance.doWork();
+      System.out.println("finished " + target);
     } catch (IOException e) {
       System.err.println("something was wrong, " + e.getMessage());
       e.printStackTrace(System.err);
