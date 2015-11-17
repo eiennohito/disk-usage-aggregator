@@ -160,14 +160,22 @@ class CollectionServiceModule extends Module {
   }
 }
 
-class CollectionTasksService @Inject() (skd: SavedKeyDAO, regs: CollectionRegistry) extends StrictLogging {
+class CollectionTasksService @Inject() (
+  skd: SavedKeyDAO,
+  regs: CollectionRegistry,
+  conf: Configuration
+) extends StrictLogging {
+
   def makeWait(req: CollectionTarget, minutes: FiniteDuration) = synchronized {
     val date = DateTime.now().plusMillis(minutes.toMillis.toInt)
     stored = stored.updated(req.key, date)
   }
 
+  val scanTTL = conf.getMilliseconds("aggregator.collection.scan-ttl").getOrElse(1000 * 60 * 60 * 24L)
+
   def mark(target: TraversableOnce[CollectionTarget]) = {
-    val upDate = DateTime.now().plusDays(1)
+    val dur = org.joda.time.Duration.millis(scanTTL)
+    val upDate = DateTime.now().plus(dur)
     val keys = target.map(_.key -> upDate).toMap
     synchronized {
       stored = stored ++ keys
