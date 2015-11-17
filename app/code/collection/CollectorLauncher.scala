@@ -1,5 +1,6 @@
 package code.collection
 
+import java.util.concurrent.TimeUnit
 import javax.inject.{Provider, Inject, Singleton}
 
 import akka.actor._
@@ -23,6 +24,7 @@ import scala.concurrent.duration.FiniteDuration
   */
 class CollectorLauncher (
   concurrency: Int,
+  inteval: FiniteDuration,
   executor: ProcessLauncher,
   cas: CollectionArgsSpawner,
   tasks: CollectionTasksService,
@@ -35,7 +37,7 @@ class CollectorLauncher (
   case object Tick
   case class Mark(trg: Seq[CollectionTarget])
 
-  context.system.scheduler.schedule(5.seconds, 15.seconds, self, Tick)
+  context.system.scheduler.schedule(5.seconds, inteval, self, Tick)
 
 
   var running: Seq[(CollectionTarget, Process, String, ActorRef)] = Nil
@@ -49,7 +51,7 @@ class CollectorLauncher (
       if (cnt > 0) {
         val ignore = running.map(_._1).toSet
         val available = tasks.request(cnt, ignore)
-        log.info(s"$cnt slots available, running ${available.size} items")
+        log.debug(s"$cnt slots available, running ${available.size} items")
         val launched = available.flatMap { req =>
           val collectionArgs = cas.create()
           val host = req.selectHostname()
@@ -105,8 +107,11 @@ class CollectorActorProvider @Inject() (
   colls: Collectors
 ) extends Provider[CollectorActorRef] {
   override def get() = {
+    import scala.concurrent.duration._
     val concurrency = conf.getInt("aggregator.collection.max-concurrency").getOrElse(1)
-    val props = Props(new CollectorLauncher(concurrency, pex, cas, csvc, colls))
+    val tickInterval = conf.getMilliseconds("aggregator.colleciton.tick-interval")
+      .map(FiniteDuration(_, TimeUnit.MILLISECONDS)).getOrElse(15.seconds)
+    val props = Props(new CollectorLauncher(concurrency, tickInterval, pex, cas, csvc, colls))
     val aref = asys.actorOf(props, "collector")
     new CollectorActorRef {
       override def ref = aref
