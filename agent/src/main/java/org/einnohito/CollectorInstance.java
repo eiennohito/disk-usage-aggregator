@@ -119,8 +119,8 @@ public class CollectorInstance implements Closeable {
     private void send() throws IOException {
       DatagramPacket packet = new DatagramPacket(
           sendBuffer.array(),
-          sendBuffer.arrayOffset(),
-          sendBuffer.arrayOffset() + sendBuffer.limit(),
+          0,
+          sendBuffer.position(),
           remote
       );
       socket.send(packet);
