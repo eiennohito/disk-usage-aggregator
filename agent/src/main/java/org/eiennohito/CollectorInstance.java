@@ -1,4 +1,4 @@
-package org.einnohito;
+package org.eiennohito;
 
 import java.io.Closeable;
 import java.io.IOException;
@@ -9,9 +9,7 @@ import java.nio.ByteBuffer;
 import java.nio.charset.Charset;
 import java.nio.file.*;
 import java.nio.file.attribute.*;
-import java.util.concurrent.BlockingDeque;
 import java.util.concurrent.BlockingQueue;
-import java.util.concurrent.ConcurrentLinkedQueue;
 import java.util.concurrent.LinkedBlockingQueue;
 
 /**

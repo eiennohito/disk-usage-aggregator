@@ -1,4 +1,4 @@
-package org.einnohito;
+package org.eiennohito;
 
 import java.io.IOException;
 import java.net.InetSocketAddress;
