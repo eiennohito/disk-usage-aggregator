@@ -26,6 +26,8 @@ public class MessageFormatter implements MessageFlags {
 
   private final int payloadMax;
 
+  private final Object sync = new Object();
+
   public MessageFormatter(MessageSender sender, int medSize, int msgSize, String mark) {
     this.sender = sender;
     buffer = ByteBuffer.allocate(medSize);
@@ -48,21 +50,25 @@ public class MessageFormatter implements MessageFlags {
   }
 
   public void flush() throws IOException {
-    message.flip();
-    sender.sendBuffer(message);
-    message.clear();
-    appendHead();
+    synchronized (sync) {
+      message.flip();
+      sender.sendBuffer(message);
+      message.clear();
+      appendHead();
+    }
   }
 
   private void appendEntry() throws IOException {
-    buffer.flip();
-    if (canAppendMsg()) {
-      flush();
+    synchronized (sync) {
+      buffer.flip();
+      if (canAppendMsg()) {
+        flush();
+      }
+      message.put(buffer);
     }
-    message.put(buffer);
   }
 
-  private boolean canAppendMsg() {
+  private synchronized boolean canAppendMsg() {
     return message.remaining() < buffer.remaining();
   }
 
@@ -92,7 +98,7 @@ public class MessageFormatter implements MessageFlags {
 
   private final CharsetEncoder utf8enc = UTF8.newEncoder();
 
-  public void appendDirectoryDown(String name, long id) throws IOException {
+  public void appendDirectoryDown(String name, long id, int userId) throws IOException {
     buffer.clear();
 
     buffer.put(ENT_DIRECTORY_DOWN);
@@ -100,12 +106,14 @@ public class MessageFormatter implements MessageFlags {
     utf8enc.encode(CharBuffer.wrap(name), buffer, true);
     buffer.put(SEP_FLD);
     formatPositive(buffer, id);
+    buffer.put(SEP_FLD);
+    formatPositive(buffer, userId);
     buffer.put(SEP_ENT);
 
     appendEntry();
   }
 
-  public void appendDirectoryUp(long id, long ownSize, long filesOwn, long recSize, long recFiles, int userId) throws IOException {
+  public void appendDirectoryUp(long id, long ownSize, long filesOwn, long recSize, long recFiles) throws IOException {
     buffer.clear();
 
     buffer.put(ENT_DIRECTORY_UP);
@@ -119,8 +127,6 @@ public class MessageFormatter implements MessageFlags {
     formatPositive(buffer, recSize);
     buffer.put(SEP_FLD);
     formatPositive(buffer, recFiles);
-    buffer.put(SEP_FLD);
-    formatPositive(buffer, userId);
     buffer.put(SEP_ENT);
 
     appendEntry();
@@ -139,22 +145,24 @@ public class MessageFormatter implements MessageFlags {
       buffer.put(SEP_ENT);
       appendEntry();
     } else {
-      flush();
-      int canPut = payloadMax - 1;
-      while (canPut > 0) {
-        buffer.flip();
-        if (canPut > buffer.remaining()) {
-          canPut -= buffer.remaining();
-        } else {
-          buffer.limit(canPut);
+      synchronized (sync) {
+        flush();
+        int canPut = payloadMax - 1;
+        while (canPut > 0) {
+          buffer.flip();
+          if (canPut > buffer.remaining()) {
+            canPut -= buffer.remaining();
+          } else {
+            buffer.limit(canPut);
+          }
+          message.put(buffer);
+          buffer.clear();
+          utf8enc.encode(wrapped, buffer, true);
         }
-        message.put(buffer);
-        buffer.clear();
-        res = utf8enc.encode(wrapped, buffer, true);
-      }
 
-      appendEntry();
-      message.put(SEP_ENT);
+        appendEntry();
+        message.put(SEP_ENT);
+      }
     }
   }
 

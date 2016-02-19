@@ -21,8 +21,8 @@ case class CollectionMessage(
 sealed trait CollectionEntry
 
 final case class DeviceStat(total: Long, used: Long) extends CollectionEntry
-final case class DirectoryDown(name: String, id: Long) extends CollectionEntry
-final case class DirectoryUp(id: Long, ownSize: Long, ownFiles: Long, recSize: Long, recFiles: Long, uid: Int) extends CollectionEntry
+final case class DirectoryDown(name: String, id: Long, uid: Int) extends CollectionEntry
+final case class DirectoryUp(id: Long, ownSize: Long, ownFiles: Long, recSize: Long, recFiles: Long) extends CollectionEntry
 final case class Error(id: Long, message: String) extends CollectionEntry
 
 
@@ -39,7 +39,8 @@ object MessageParser extends StrictLogging {
   def parseDirDown(objs: Array[String]): DirectoryDown = {
     DirectoryDown(
       objs(1),
-      objs(2).toLong
+      objs(2).toLong,
+      objs(3).toInt
     )
   }
 
@@ -49,8 +50,7 @@ object MessageParser extends StrictLogging {
       objs(2).toLong,
       objs(3).toLong,
       objs(4).toLong,
-      objs(5).toLong,
-      objs(6).toInt
+      objs(5).toLong
     )
   }
 
