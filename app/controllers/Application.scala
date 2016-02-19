@@ -2,19 +2,35 @@ package controllers
 
 import javax.inject.Inject
 
-import code.collection.{CollectionRegistry, CollectionTasksService, DirectoryEntryDao, PlaceTotalDao}
+import code.collection._
+import org.joda.time.{DateTime, Duration}
 import play.api._
 import play.api.mvc._
 
 class Application @Inject()(
   registry: CollectionRegistry,
   cts: CollectionTasksService,
+  skd: SavedKeyDAO,
   ded: DirectoryEntryDao,
   space: PlaceTotalDao
 ) extends Controller {
 
   def index = Action {
-    Ok(views.html.index(registry.items))
+    val items = registry.items
+    val all = skd.all()
+    val mx = all.map {i => i.id -> i }.toMap
+    val data = items.map { i =>
+      val o = mx.get(i.key)
+      HostStatus(
+        i.key,
+        i.hosts,
+        i.pattern,
+        o.map(_.lastUpdate),
+        o.map(x => Duration.millis(x.duration)),
+        o.map(_.updDate)
+      )
+    }
+    Ok(views.html.index(data))
   }
 
   def reload(key: String) = Action {
@@ -50,3 +66,6 @@ class Application @Inject()(
 }
 
 case class PlaceStats(name: String, total: Long, used: Long, usedFs: Long)
+case class HostStatus(key: String, hosts: Seq[String], pattern: String,
+  lastDate: Option[DateTime], lastEplaced: Option[Duration], nextDate: Option[DateTime]
+)

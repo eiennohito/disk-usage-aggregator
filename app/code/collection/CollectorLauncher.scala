@@ -1,19 +1,19 @@
 package code.collection
 
 import java.util.concurrent.TimeUnit
-import javax.inject.{Provider, Inject, Singleton}
+import javax.inject.{Inject, Provider, Singleton}
 
 import akka.actor._
-import com.google.inject.{Scopes, Provides, Binder, Module}
+import com.google.inject.{Binder, Module, Provides, Scopes}
 import com.mongodb.casbah.commons.MongoDBObject
 import com.mongodb.casbah.commons.conversions.scala.RegisterJodaTimeConversionHelpers
-import com.mongodb.casbah.{MongoClientURI, MongoDB, MongoClient}
+import com.mongodb.casbah.{MongoClient, MongoClientURI, MongoDB}
 import com.novus.salat.Context
 import com.novus.salat.annotations._
 import com.novus.salat.dao.{DAO, SalatDAO}
 import com.typesafe.scalalogging.slf4j.StrictLogging
-import org.joda.time.DateTime
-import play.api.{Environment, Configuration}
+import org.joda.time.{DateTime, Duration}
+import play.api.{Configuration, Environment}
 
 import scala.collection.mutable
 import scala.concurrent.duration.FiniteDuration
@@ -22,6 +22,15 @@ import scala.concurrent.duration.FiniteDuration
   * @author eiennohito
   * @since 2015/11/13
   */
+
+case class CollectionStatus(
+  target: CollectionTarget,
+  process: Process,
+  host: String,
+  actor: ActorRef,
+  startTime: DateTime = DateTime.now()
+)
+
 class CollectorLauncher (
   concurrency: Int,
   inteval: FiniteDuration,
@@ -40,16 +49,16 @@ class CollectorLauncher (
   context.system.scheduler.schedule(5.seconds, inteval, self, Tick)
 
 
-  var running: Seq[(CollectionTarget, Process, String, ActorRef)] = Nil
+  var running: Seq[CollectionStatus] = Nil
 
   override def receive = {
     case Tick =>
-      val (alive, dead) = running.partition(_._2.isAlive)
+      val (alive, dead) = running.partition(_.process.isAlive)
       val cnt = concurrency - alive.length
       val hosts = new mutable.HashSet[String]()
-      hosts ++= alive.map(_._3)
+      hosts ++= alive.map(_.host)
       if (cnt > 0) {
-        val ignore = running.map(_._1).toSet
+        val ignore = running.map(_.target).toSet
         val available = tasks.request(cnt, ignore)
         log.debug(s"$cnt slots available, running ${available.size} items")
         val launched = available.flatMap { req =>
@@ -61,7 +70,7 @@ class CollectorLauncher (
           } else {
             val aref = collectors.makeCollector(Collection.MakeCollector(collectionArgs.label, req))
             hosts += host
-            (req, executor.launch(req, collectionArgs, host), host, aref) :: Nil
+            CollectionStatus(req, executor.launch(req, collectionArgs, host), host, aref) :: Nil
           }
         }
         self ! Mark(available)
@@ -69,14 +78,14 @@ class CollectorLauncher (
       } else {
         running = alive
       }
-      val targets = dead.map(_._1)
-      tasks.mark(targets)
-      dead.foreach(_._4 ! Collection.CollectionFinished)
+
+      tasks.mark(dead)
+      dead.foreach(_.actor ! Collection.CollectionFinished)
   }
 
   @throws[Exception](classOf[Exception])
   override def postStop() = {
-    running.map(_._2).foreach(_.destroy())
+    running.map(_.process).foreach(_.destroy())
   }
 }
 
@@ -84,10 +93,17 @@ trait CollectionData {
 
 }
 
-case class SavedKey(@Key("_id") id: String, updDate: DateTime)
+case class SavedKey(
+  @Key("_id") id: String,
+  lastUpdate: DateTime,
+  updDate: DateTime,
+  duration: Long
+)
 
 
-trait SavedKeyDAO extends DAO[SavedKey, String]
+trait SavedKeyDAO extends DAO[SavedKey, String] {
+  def all() = find(MongoDBObject.empty).toList
+}
 
 trait MongoInstance {
   def client: MongoClient
@@ -173,14 +189,16 @@ class CollectionTasksService @Inject() (
 
   val scanTTL = conf.getMilliseconds("aggregator.collection.scan-ttl").getOrElse(1000 * 60 * 60 * 24L)
 
-  def mark(target: TraversableOnce[CollectionTarget]) = {
+  def mark(target: Seq[CollectionStatus]) = {
     val dur = org.joda.time.Duration.millis(scanTTL)
-    val upDate = DateTime.now().plus(dur)
-    val keys = target.map(_.key -> upDate).toMap
+    val now = DateTime.now()
+    val upDate = now.plus(dur)
+    val keys = target.map(x => (x.target.key, upDate, now.getMillis - x.startTime.getMillis))
+    val update = keys.map { case (a, b, c) => a -> b}.toMap
     synchronized {
-      stored = stored ++ keys
+      stored = stored ++ update
     }
-    val objs = keys.map(SavedKey.tupled)
+    val objs = keys.map { case (key, next, processTime) => SavedKey(key, now, next, processTime) }
     objs.foreach(skd.save)
   }
 
@@ -190,9 +208,7 @@ class CollectionTasksService @Inject() (
     val updateTarget = DateTime.now()
     val ignoredKeys = ignore.map(_.key)
     val data = regs.items.view.filter {
-      ct => stored.get(ct.key)
-        .map(_.isBefore(updateTarget))
-        .getOrElse(true) && !ignoredKeys.contains(ct.key)
+      ct => stored.get(ct.key).forall(_.isBefore(updateTarget)) && !ignoredKeys.contains(ct.key)
     }.take(cnt)
     data.toList
   }

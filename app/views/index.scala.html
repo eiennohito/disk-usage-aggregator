@@ -1,6 +1,11 @@
-@import code.collection.CollectionTarget
+@import org.joda.time.format.DateTimeFormat
+@import org.joda.time.DateTime
+@(items: Seq[HostStatus])
 
-@(items: Seq[CollectionTarget])
+@asd(dt: DateTime) = @{
+  val dtf = DateTimeFormat.forStyle("MS")
+  dtf.print(dt)
+}
 
 @main("Usage: Control Panel") {
   <p>This is the collector status (sort of).
@@ -10,12 +15,25 @@
 
   <p>Registered targets:</p>
   <ul>
+
     @for(i <- items) {
       <li>
         <a href="@routes.Application.reload(i.key)">
           R
         </a>
         [@i.hosts.mkString(",")]: @i.pattern
+        Last Update: @{
+          i.lastDate match {
+            case Some(s) => asd(s)
+            case None => ""
+          }
+        };
+        Next Update: @{
+          i.nextDate match {
+            case Some(s) => asd(s)
+            case None => ""
+          }
+        }
       </li>
     }
   </ul>
