@@ -17,6 +17,7 @@ import java.util.concurrent.atomic.AtomicLong;
  * @since 2015/11/17
  */
 public class CollectorInstance implements Closeable {
+  public static final long PARENT_ID = 0L;
   private final InetSocketAddress isa;
   private final String mark;
   private final Path target;
@@ -34,11 +35,11 @@ public class CollectorInstance implements Closeable {
   public void doWork() throws IOException {
     try (DatagramSocket socket = new DatagramSocket()) {
       Sender sndr = new Sender(socket, isa);
-      AtomicLong cntr = new AtomicLong(0L);
+      AtomicLong cntr = new AtomicLong(1L);
       MessageFormatter fmtr = new MessageFormatter(sndr, BUFFER_SIZE, MESSAGE_SIZE, mark);
 
       PosixFileAttributes targetAttrs = Files.readAttributes(target, PosixFileAttributes.class, LinkOption.NOFOLLOW_LINKS);
-      ProcessingStep targetStep = new ProcessingStep(target, targetAttrs, cntr);
+      ProcessingStep targetStep = new ProcessingStep(target, targetAttrs, cntr, PARENT_ID);
 
       FileStore store = Files.getFileStore(target);
       fmtr.appendOverall(store.getTotalSpace(), store.getTotalSpace() - store.getUsableSpace());

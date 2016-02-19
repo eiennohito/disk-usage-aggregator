@@ -1,125 +1,20 @@
 package code.collection
 
-import java.io.{BufferedReader, InputStreamReader}
+import java.util.Date
 import java.util.concurrent.atomic.AtomicLong
 
 import akka.actor._
-import akka.util.{ByteString, Timeout}
-import code.io.udp.{InfoSink, UdpInput}
+import akka.util.Timeout
+import code.io.udp.InfoSink
 import com.google.inject.{Binder, Module, Provides, Singleton}
+import com.mongodb.casbah.WriteConcern
 import com.mongodb.casbah.commons.MongoDBObject
 import com.novus.salat.Context
-import com.novus.salat.dao.{SalatDAO, DAO}
+import com.novus.salat.dao.{DAO, SalatDAO}
+import org.joda.time.DateTime
 
-import scala.collection.mutable
 import scala.concurrent.Await
 
-/**
-  * @author eiennohito
-  * @since 2015/11/16
-  */
-trait CollectionEvent {
-  def mark: String
-}
-case class FilesystemInfo(mark: String, total: Long, used: Long) extends CollectionEvent
-case class DirectoryFinished(mark: String, path: String, uid: Int, size: Long) extends CollectionEvent
-
-class CollectionRoot(input: ActorRef, ded: DirectoryEntryDao) extends Actor with ActorLogging {
-
-  @throws[Exception](classOf[Exception])
-  override def preStart() = {
-    super.preStart()
-    input ! UdpInput.Register
-  }
-
-  val collectors = new mutable.HashMap[String, ActorRef]()
-
-  def parseEvent(line: String, parts: Array[String]) = {
-    try {
-      parts.length match {
-        case 3 =>
-          Some(FilesystemInfo(
-            parts(0),
-            parts(1).toLong,
-            parts(2).toLong
-          ))
-        case 4 =>
-          Some(DirectoryFinished(
-            parts(0),
-            parts(1),
-            parts(2).toInt,
-            parts(3).toLong
-          ))
-        case _ =>
-          log.error(s"could not process event: $line")
-          None
-      }
-    } catch {
-      case e: Exception =>
-        log.error(e, "could not process event: {}", line)
-        None
-    }
-  }
-
-  def processInput(bs: ByteString): Unit = {
-    val is = bs.iterator.asInputStream
-    val rdr = new BufferedReader(new InputStreamReader(is, "utf-8"), 2048)
-    var line = rdr.readLine()
-    while (line != null) {
-      val parts = line.split('\u0000')
-      parseEvent(line, parts) match {
-        case Some(obj) =>
-          collectors.get(obj.mark) match {
-            case Some(a) => a ! obj
-            case None =>
-              log.warning(s"no actor is registered for mark: ${obj.mark}, ev: $line")
-          }
-        case None => //
-      }
-      line = rdr.readLine()
-    }
-  }
-
-  override def receive = {
-    case Collection.MakeCollector(mark, prefix) =>
-      val props = Props(new Collector(mark, prefix, ded))
-      val child = context.actorOf(props, mark)
-      collectors.put(mark, child)
-      sender() ! child
-    case Collection.CollectionFinished(mark) =>
-      collectors.remove(mark).foreach(context.stop)
-    case bs: ByteString =>
-      processInput(bs)
-  }
-}
-
-class Collector(mark: String, ct: CollectionTarget, ded: DirectoryEntryDao) extends Actor with ActorLogging {
-
-  val idx = ct.target.pos
-
-  ded.dropKey(ct.key)
-
-  override def receive = {
-    case DirectoryFinished(_, path, uid, size) =>
-      if (idx != -1) {
-        val items = path.split("/")
-        if (items.length == idx + 1) {
-          val item = items(idx)
-          val entry = DirectoryEntry(
-            ded.makeId(),
-            None,
-            ct.key,
-            item,
-            size
-          )
-          ded.save(entry)
-        }
-      }
-    case FilesystemInfo(_, total, used) => //ignore now
-    case Collection.CollectionFinished =>
-      context.parent ! Collection.CollectionFinished
-  }
-}
 
 
 object Collection {
@@ -133,35 +28,90 @@ trait Collectors {
 
 import com.novus.salat.annotations._
 
-case class DirectoryEntry(@Key("_id") id: Long, parent: Option[Long], key: String, name: String, size: Long)
+case class DirectoryEntry(
+  @Key("_id") id: Long,
+  parent: Option[Long],
+  place: String,
+  user: String,
+  size: Long,
+  files: Long,
+  date: DateTime
+)
 
 case class ByKey(@Key("_id")key: String, total: Long)
 
 trait DirectoryEntryDao extends DAO[DirectoryEntry, Long] {
+  def dropOld(place: String, date: DateTime): Unit = {
+    val q = MongoDBObject(
+      "place" -> place,
+      "date" -> MongoDBObject(
+        "$lt" -> date
+      )
+    )
+
+    this.remove(q)
+  }
+
+
+  def forPair(place: String, user: String) = {
+    val q = MongoDBObject(
+      "place" -> place,
+      "user" -> user
+    )
+    this.findOne(q)
+  }
+
+  def updateStats(place: String, user: String, size: Long, files: Long): DirectoryEntry = {
+    val obj = forPair(place, user) match {
+      case Some(x) => x
+      case None =>
+        val id = makeId()
+        DirectoryEntry(
+          id,
+          None,
+          place,
+          user,
+          0L,
+          0L,
+          DateTime.now()
+        )
+    }
+
+    val updated = obj.copy(
+      size = size,
+      files = files,
+      date = DateTime.now()
+    )
+
+    this.update(MongoDBObject("_id" -> obj.id), updated, upsert = true, multi = false, WriteConcern.Acknowledged)
+
+    obj
+  }
+
   def forUser(name: String) = {
     val cmd = MongoDBObject(
-      "name" -> name
+      "user" -> name
     )
     val cursor = this.find(cmd)
-    cursor.map(e => ByKey(e.key, e.size)).toList.sortBy(-_.total)
+    cursor.map(e => ByKey(e.place, e.size)).toList.sortBy(-_.total)
   }
 
   def forKey(key: String) = {
     val cmd = MongoDBObject(
-      "key" -> key
+      "place" -> key
     )
     val cursor = this.find(cmd)
-    cursor.map(e => ByKey(e.name, e.size)).toList.sortBy(-_.total)
+    cursor.map(e => ByKey(e.user, e.size)).toList.sortBy(-_.total)
   }
 
-  def dropKey(key: String) = {
-    val cmd = MongoDBObject(
-      "key" -> key
-    )
-    this.remove(cmd)
+  def maxId() = {
+    val qs = MongoDBObject("_id" -> -1)
+
+    val data = this.find(MongoDBObject.empty).$orderby(qs).limit(1)
+    data.toList.headOption.map(_.id).getOrElse(0L)
   }
 
-  val start = new AtomicLong(this.ids(MongoDBObject()).max + 1)
+  val start = new AtomicLong(maxId() + 1L)
   def makeId(): Long = start.getAndIncrement()
 
   implicit def context: Context
@@ -169,7 +119,7 @@ trait DirectoryEntryDao extends DAO[DirectoryEntry, Long] {
   def byKey(): Seq[ByKey] = {
     val pipeline = Seq(
       MongoDBObject("$group" -> MongoDBObject(
-        "_id" -> "$key",
+        "_id" -> "$place",
         "total" -> MongoDBObject("$sum" -> "$size")
       )), MongoDBObject("$sort" -> MongoDBObject(
         "total" -> -1
@@ -184,7 +134,7 @@ trait DirectoryEntryDao extends DAO[DirectoryEntry, Long] {
   def byName(): Seq[ByKey] = {
     val pipeline = Seq(
       MongoDBObject("$group" -> MongoDBObject(
-        "_id" -> "$name",
+        "_id" -> "$user",
         "total" -> MongoDBObject("$sum" -> "$size")
       )), MongoDBObject("$sort" -> MongoDBObject(
         "total" -> -1
@@ -193,6 +143,35 @@ trait DirectoryEntryDao extends DAO[DirectoryEntry, Long] {
     val out = this.collection.aggregate(pipeline)
     val grater = com.novus.salat.grater[ByKey]
     out.results.map { o =>  grater.asObject(new MongoDBObject(o)) }.toBuffer
+  }
+}
+
+case class PlaceTotal(
+  @Key("_id") id: Long,
+  place: String,
+  total: Long,
+  used: Long
+)
+
+trait PlaceTotalDao extends DAO[PlaceTotal, Long] {
+
+  def byPlace(place: String) = {
+    val query = MongoDBObject("place" -> place)
+    this.findOne(query)
+  }
+
+  def updateTotal(place: String, total: Long, used: Long): PlaceTotal = {
+    val obj = byPlace(place) match {
+      case Some(x) => x
+      case None =>
+        val id = this.count()
+        PlaceTotal(
+          id, place, 0L, 0L
+        )
+    }
+    val updated = obj.copy(total = total, used = used)
+    this.update(MongoDBObject("_id" -> obj.id), updated, upsert = true, multi = false, WriteConcern.Acknowledged)
+    obj
   }
 }
 
@@ -208,7 +187,17 @@ class CollectionModule extends Module {
     new SalatDAO[DirectoryEntry, Long](mongoInstance.database("direntry")) with DirectoryEntryDao {
       def context = ctx
     }
+  }
 
+  @Provides
+  @Singleton
+  def placesDao(
+    implicit ctx: Context,
+    mongoInstance: MongoInstance
+  ): PlaceTotalDao = {
+    new SalatDAO[PlaceTotal, Long](mongoInstance.database("places")) with PlaceTotalDao {
+      def context = ctx
+    }
   }
 
   @Provides
@@ -216,12 +205,18 @@ class CollectionModule extends Module {
   def collectors(
     asys: ActorSystem,
     info: InfoSink,
-    ded: DirectoryEntryDao
+    ded: DirectoryEntryDao,
+    places: PlaceTotalDao
   ): Collectors = {
     new Collectors {
 
+      private val updater = asys.actorOf(
+        Props(new Updater(ded, places)),
+        name = "updater"
+      )
+
       private val croot = asys.actorOf(
-        Props(new CollectionRoot(info.actor, ded)),
+        Props(new CollectionRoot(info.actor, updater)),
         name = "collectors"
       )
 

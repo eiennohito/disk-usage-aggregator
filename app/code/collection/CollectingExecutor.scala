@@ -68,7 +68,9 @@ class ProcessLauncher(pythonScript: File, executor: ExecutionContext) extends St
   def launch(target: CollectionTarget, inst: CollectionInstArgs, host: String): Process = {
     val pbldr = new ProcessBuilder()
 
-    pbldr.command(target.makeArgs(inst, host): _*)
+    val args = target.makeArgs(inst, host)
+    logger.info(args.mkString(" "))
+    pbldr.command(args: _*)
     pbldr.redirectError(Redirect.PIPE)
     pbldr.redirectOutput(Redirect.PIPE)
     if (!target.useJava(host)) {
@@ -230,9 +232,9 @@ class HostModule extends Module {
     val id = new AtomicInteger(0)
 
     override def create() = {
-      val runId = id.getAndIncrement()
+      val runId = id.getAndIncrement() & 0xffff
       val time = (System.nanoTime() >> 14) & 0xffff
-      new CollectionInstArgs(is.addr.getHostName, is.addr.getPort, f"$runId-$time%x")
+      new CollectionInstArgs(is.addr.getHostName, is.addr.getPort, f"$runId%x_$time%x")
     }
   }
 

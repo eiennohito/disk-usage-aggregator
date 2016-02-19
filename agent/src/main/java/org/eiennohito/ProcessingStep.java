@@ -13,21 +13,23 @@ class ProcessingStep {
   private final Path data;
   private final PosixFileAttributes attrs;
   private final AtomicLong counter;
+  private final long parentId;
   private long ownFiles = 0;
   private long ownSize = 0;
   private long recFiles = 0;
   private long recSize = 0;
 
-  public ProcessingStep(Path data, PosixFileAttributes attrs, AtomicLong counter) {
+  public ProcessingStep(Path data, PosixFileAttributes attrs, AtomicLong counter, long parentId) {
     this.data = data;
     this.attrs = attrs;
     this.counter = counter;
+    this.parentId = parentId;
   }
 
   public void process(MessageFormatter formatter) throws IOException {
     long id = counter.getAndIncrement();
     try {
-      formatter.appendDirectoryDown(data.getFileName().toString(), id, attrs.owner().hashCode());
+      formatter.appendDirectoryDown(data.getFileName().toString(), id, parentId, attrs.owner().hashCode());
 
       try {
         processDir(formatter, id);
@@ -49,11 +51,12 @@ class ProcessingStep {
           childAttrs = Files.readAttributes(p, PosixFileAttributes.class, LinkOption.NOFOLLOW_LINKS);
 
           if (childAttrs.isDirectory() && !childAttrs.isSymbolicLink()) {
-            ProcessingStep child = new ProcessingStep(p, childAttrs, counter);
+            ProcessingStep child = new ProcessingStep(p, childAttrs, counter, id);
+            child.process(formatter);
             addUp(child);
           } else {
-            ownFiles += childAttrs.size();
-            ownSize += 1;
+            ownSize += childAttrs.size();
+            ownFiles += 1;
           }
         } catch (SecurityException e) {
           formatter.appendError(id, "security exception: " + p.getFileName() + "\n" + e.getMessage());

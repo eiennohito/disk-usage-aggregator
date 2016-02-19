@@ -21,7 +21,7 @@ case class CollectionMessage(
 sealed trait CollectionEntry
 
 final case class DeviceStat(total: Long, used: Long) extends CollectionEntry
-final case class DirectoryDown(name: String, id: Long, uid: Int) extends CollectionEntry
+final case class DirectoryDown(name: String, id: Long, parent: Long, uid: Int) extends CollectionEntry
 final case class DirectoryUp(id: Long, ownSize: Long, ownFiles: Long, recSize: Long, recFiles: Long) extends CollectionEntry
 final case class Error(id: Long, message: String) extends CollectionEntry
 
@@ -29,34 +29,40 @@ final case class Error(id: Long, message: String) extends CollectionEntry
 object MessageParser extends StrictLogging {
   val utf8 = Charset.forName("utf-8")
 
+  implicit private class XString(val x: String) extends AnyVal {
+    def xInt: Int = java.lang.Integer.parseInt(x, 36)
+    def xLong: Long = java.lang.Long.parseLong(x, 36)
+  }
+
   def parseOverall(objs: Array[String]): DeviceStat = {
     DeviceStat(
-      objs(1).toLong,
-      objs(2).toLong
+      objs(1).xLong,
+      objs(2).xLong
     )
   }
 
   def parseDirDown(objs: Array[String]): DirectoryDown = {
     DirectoryDown(
       objs(1),
-      objs(2).toLong,
-      objs(3).toInt
+      objs(2).xLong,
+      objs(3).xLong,
+      objs(4).xInt
     )
   }
 
   def parseDirUp(objs: Array[String]): DirectoryUp = {
     DirectoryUp(
-      objs(1).toLong,
-      objs(2).toLong,
-      objs(3).toLong,
-      objs(4).toLong,
-      objs(5).toLong
+      objs(1).xLong,
+      objs(2).xLong,
+      objs(3).xLong,
+      objs(4).xLong,
+      objs(5).xLong
     )
   }
 
   def parseError(objs: Array[String]): Error = {
     Error(
-      objs(1).toLong,
+      objs(1).xLong,
       objs(2)
     )
   }

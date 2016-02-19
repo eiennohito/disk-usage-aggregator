@@ -30,7 +30,7 @@ class MessageFormatterTest extends FreeSpec with Matchers with LoneElement with 
         val printed = MessageFormatter.formatPositive(sndr.buffer, i)
         printed should be >= 1
         val srep = new String(sndr.buffer.array(), 0, printed)
-        srep shouldBe i.toString
+        srep shouldBe java.lang.Long.toString(i, 36)
       }
 
       "0" in { checkFormat(0) }

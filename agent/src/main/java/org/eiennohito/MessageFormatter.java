@@ -85,7 +85,7 @@ public class MessageFormatter implements MessageFlags {
     message.put(SEP_ENT);
   }
 
-  public void appendOverall(long usedBytes, long totalBytes) throws IOException {
+  public void appendOverall(long totalBytes, long usedBytes) throws IOException {
     buffer.clear();
     buffer.put(ENT_OVERALL);
     buffer.put(SEP_FLD);
@@ -98,7 +98,7 @@ public class MessageFormatter implements MessageFlags {
 
   private final CharsetEncoder utf8enc = UTF8.newEncoder();
 
-  public void appendDirectoryDown(String name, long id, int userId) throws IOException {
+  public void appendDirectoryDown(String name, long id, long parent, int userId) throws IOException {
     buffer.clear();
 
     buffer.put(ENT_DIRECTORY_DOWN);
@@ -106,6 +106,8 @@ public class MessageFormatter implements MessageFlags {
     utf8enc.encode(CharBuffer.wrap(name), buffer, true);
     buffer.put(SEP_FLD);
     formatPositive(buffer, id);
+    buffer.put(SEP_FLD);
+    formatPositive(buffer, parent);
     buffer.put(SEP_FLD);
     formatPositive(buffer, userId);
     buffer.put(SEP_ENT);
@@ -173,21 +175,36 @@ public class MessageFormatter implements MessageFlags {
    */
   private final static byte ZERO = 0x30;
 
+  private final static byte[] CHARS = {
+      '0', '1', '2', '3', '4', '5', '6', '7', '8', '9',
+      'a', 'b', 'c', 'd', 'e', 'f', 'g', 'h', 'i', 'j',
+      'k', 'l', 'm', 'n', 'o', 'p', 'q', 'r', 's', 't',
+      'u', 'v', 'w', 'x', 'y', 'z'
+  };
+
+  private static final int CHARLEN = CHARS.length;
+
+  /**
+   * Does base 36 formatting of a long
+   * @param buf
+   * @param value
+   * @return
+   */
   static int formatPositive(ByteBuffer buf, long value) {
     assert (value >= 0);
 
-    if (value < 10) {
-      buf.put((byte)(ZERO + value));
+    if (value < CHARLEN) {
+      buf.put(CHARS[(int) value]);
       return 1;
     }
 
     int printed = 0;
 
     while (value != 0) {
-      long rem = value % 10;
-      long val2 = value / 10;
+      long rem = value % CHARLEN;
+      long val2 = value / CHARLEN;
 
-      buf.put((byte)(ZERO + rem));
+      buf.put(CHARS[(int) rem]);
       value = val2;
       printed += 1;
     }
