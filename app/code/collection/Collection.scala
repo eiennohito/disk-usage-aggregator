@@ -154,6 +154,9 @@ case class PlaceTotal(
 )
 
 trait PlaceTotalDao extends DAO[PlaceTotal, Long] {
+  def all() = {
+    this.find(MongoDBObject.empty).toList
+  }
 
   def byPlace(place: String) = {
     val query = MongoDBObject("place" -> place)

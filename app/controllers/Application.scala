@@ -2,14 +2,15 @@ package controllers
 
 import javax.inject.Inject
 
-import code.collection.{DirectoryEntryDao, CollectionTasksService, CollectionRegistry}
+import code.collection.{CollectionRegistry, CollectionTasksService, DirectoryEntryDao, PlaceTotalDao}
 import play.api._
 import play.api.mvc._
 
 class Application @Inject()(
   registry: CollectionRegistry,
   cts: CollectionTasksService,
-  ded: DirectoryEntryDao
+  ded: DirectoryEntryDao,
+  space: PlaceTotalDao
 ) extends Controller {
 
   def index = Action {
@@ -24,7 +25,17 @@ class Application @Inject()(
   def stats() = Action {
     val keys = ded.byKey()
     val names = ded.byName()
-    Ok(views.html.stats(names, keys))
+    val total = space.all().map(x => x.place -> x).toMap
+    val stats = keys.map {  x =>
+      val t = total(x.key)
+      PlaceStats (
+        x.key,
+        t.total,
+        x.total,
+        t.used
+      )
+    }
+    Ok(views.html.stats(names, stats))
   }
 
   def userStats(name: String) = Action {
@@ -37,3 +48,5 @@ class Application @Inject()(
     Ok(views.html.detail("host", name, info))
   }
 }
+
+case class PlaceStats(name: String, total: Long, used: Long, usedFs: Long)

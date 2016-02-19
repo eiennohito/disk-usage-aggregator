@@ -1,7 +1,7 @@
 @import code.collection.ByKey
-@(byName: Seq[ByKey], byKey: Seq[ByKey])
+@(byName: Seq[ByKey], byKey: Seq[PlaceStats])
 
-@main("Welcome to Play") {
+@main("Disk Usage") {
   <p>Stats:</p>
 
   <div class="row">
@@ -17,12 +17,13 @@
       </ul>
     </div>
     <div class="col-sm-6">
-      Hosts:
+      Hosts: Actual Used (FS Used/FS Free/FS Total)
       <ul>
       @for(n <- byKey) {
         <li>
-          <a href="@routes.Application.hostStats(n.key)">@n.key</a>
-          @code.Sizes.readable(n.total)
+          <a href="@routes.Application.hostStats(n.name)">@n.name</a>
+          @code.Sizes.readable(n.used)
+          (@{code.Sizes.readable(n.usedFs)}/@{code.Sizes.readable(n.total - n.usedFs)}/@{code.Sizes.readable(n.total)})
         </li>
       }
       </ul>
