@@ -42,13 +42,15 @@ class Application @Inject()(
     val keys = ded.byKey()
     val names = ded.byName()
     val total = space.all().map(x => x.place -> x).toMap
+    val dates = skd.all().map(x => x.id -> x.lastUpdate).toMap
     val stats = keys.map {  x =>
       val t = total(x.key)
       PlaceStats (
         x.key,
         t.total,
         x.total,
-        t.used
+        t.used,
+        dates.get(x.key)
       )
     }
     Ok(views.html.stats(names, stats))
@@ -65,7 +67,7 @@ class Application @Inject()(
   }
 }
 
-case class PlaceStats(name: String, total: Long, used: Long, usedFs: Long)
+case class PlaceStats(name: String, total: Long, used: Long, usedFs: Long, updDate: Option[DateTime])
 case class HostStatus(key: String, hosts: Seq[String], pattern: String,
   lastDate: Option[DateTime], lastEplaced: Option[Duration], nextDate: Option[DateTime]
 )

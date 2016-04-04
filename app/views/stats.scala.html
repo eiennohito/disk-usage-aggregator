@@ -1,32 +1,64 @@
 @import code.collection.ByKey
+@import org.joda.time.format.DateTimeFormat
+@import org.joda.time.DateTimeZone
 @(byName: Seq[ByKey], byKey: Seq[PlaceStats])
 
+
+@dp = @{
+  val fmatter = DateTimeFormat.forPattern("yyyy/MM/dd HH:mm:ss").withZone(DateTimeZone.getDefault)
+  fmatter
+}
+
 @main("Disk Usage") {
+
   <p>Stats:</p>
 
   <div class="row">
-    <div class="col-sm-6">
-      Users:
-      <ul>
+    <div class="col-sm-4">
+      <h2>Users</h2>
+      <table class="table">
+        <thead></thead>
+        <tbody>
         @for(n <- byName) {
-          <li>
-            <a href="@routes.Application.userStats(n.key)">@n.key</a>
-            @code.Sizes.readable(n.total)
-          </li>
+          <tr>
+            <td>
+              <a href="@routes.Application.userStats(n.key)">@n.key</a>
+            </td>
+            <td>
+              @code.Sizes.readable(n.total)
+            </td>
+          </tr>
         }
-      </ul>
+        </tbody>
+      </table>
     </div>
-    <div class="col-sm-6">
-      Hosts: Actual Used (FS Used/FS Free/FS Total)
-      <ul>
-      @for(n <- byKey) {
-        <li>
-          <a href="@routes.Application.hostStats(n.name)">@n.name</a>
-          @code.Sizes.readable(n.used)
-          (@{code.Sizes.readable(n.usedFs)}/@{code.Sizes.readable(n.total - n.usedFs)}/@{code.Sizes.readable(n.total)})
-        </li>
-      }
-      </ul>
+    <div class="col-sm-8">
+      <h2>Location</h2>
+      <table class="table">
+        <thead>
+          <tr>
+            <td>Where</td>
+            <td>Used</td>
+            <td>Used (FS)</td>
+            <td>Free (FS)</td>
+            <td>Total (FS)</td>
+            <td>Updated</td>
+          </tr>
+        </thead>
+        <tbody>
+        @for(n <- byKey) {
+          <tr>
+            <td><a href="@routes.Application.hostStats(n.name)">@n.name</a></td>
+            <td>@code.Sizes.readable(n.used)</td>
+            <td>@{code.Sizes.readable(n.usedFs)}</td>
+            <td>@{code.Sizes.readable(n.total - n.usedFs)}</td>
+            <td>@{code.Sizes.readable(n.total)}</td>
+            <td>@{n.updDate.map(dp.print).getOrElse("Not Yet")}</td>
+          </tr>
+        }
+        </tbody>
+      </table>
+
     </div>
   </div>
 }

@@ -5,7 +5,7 @@ package code
   * @since 2015/11/16
   */
 object Sizes {
-  val kBorder = 9 * 1024
+  val kBorder = 1.2 * 1024
 
   def readable(size: Long): String = {
     var sz = size.toDouble
