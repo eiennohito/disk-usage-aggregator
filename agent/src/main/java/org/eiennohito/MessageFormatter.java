@@ -191,7 +191,9 @@ public class MessageFormatter implements MessageFlags {
    * @return
    */
   static int formatPositive(ByteBuffer buf, long value) {
-    assert (value >= 0);
+    if (value < 0) {
+      throw new NumberFormatException("the number " + value + " was less than 0");
+    }
 
     if (value < CHARLEN) {
       buf.put(CHARS[(int) value]);

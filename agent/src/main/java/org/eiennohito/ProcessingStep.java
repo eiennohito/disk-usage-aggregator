@@ -29,7 +29,11 @@ class ProcessingStep {
   public void process(MessageFormatter formatter) throws IOException {
     long id = counter.getAndIncrement();
     try {
-      formatter.appendDirectoryDown(data.getFileName().toString(), id, parentId, attrs.owner().hashCode());
+      int userId = attrs.owner().hashCode();
+      if (userId < 0) {
+        userId = 0;
+      }
+      formatter.appendDirectoryDown(data.getFileName().toString(), id, parentId, userId);
 
       try {
         processDir(formatter, id);
