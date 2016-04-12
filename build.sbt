@@ -6,7 +6,7 @@ lazy val root = (project in file(".")).enablePlugins(PlayScala).dependsOn(agent)
 
 lazy val agent = (project in file("agent"))
 
-scalaVersion := "2.11.7"
+scalaVersion := "2.11.8"
 
 libraryDependencies ++= Seq(
   jdbc,
