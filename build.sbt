@@ -22,6 +22,8 @@ libraryDependencies += "org.scalatest" %% "scalatest" % "3.0.0-M11" % "test"
 
 libraryDependencies += "org.gridkit.lab" % "nanocloud" % "0.8.9"
 
+libraryDependencies += "org.hdrhistogram" % "HdrHistogram" % "2.1.8"
+
 resolvers += "scalaz-bintray" at "http://dl.bintray.com/scalaz/releases"
 
 // Play provides two styles of routers, one expects its actions to be injected, the

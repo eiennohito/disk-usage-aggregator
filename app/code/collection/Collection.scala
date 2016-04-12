@@ -1,11 +1,11 @@
 package code.collection
 
-import java.util.Date
 import java.util.concurrent.atomic.AtomicLong
 
 import akka.actor._
 import akka.util.Timeout
 import code.io.udp.InfoSink
+import code.tracing.{ProgressInfo, ReplyHistogram, Tracer, TrackStatsAccess}
 import com.google.inject.{Binder, Module, Provides, Singleton}
 import com.mongodb.casbah.WriteConcern
 import com.mongodb.casbah.commons.MongoDBObject
@@ -13,7 +13,7 @@ import com.novus.salat.Context
 import com.novus.salat.dao.{DAO, SalatDAO}
 import org.joda.time.DateTime
 
-import scala.concurrent.Await
+import scala.concurrent.{Await, ExecutionContext}
 
 
 
@@ -203,6 +203,10 @@ class CollectionModule extends Module {
     }
   }
 
+  trait TracerAccess {
+    def tracer: ActorRef
+  }
+
   @Provides
   @Singleton
   def collectors(
@@ -211,7 +215,12 @@ class CollectionModule extends Module {
     ded: DirectoryEntryDao,
     places: PlaceTotalDao
   ): Collectors = {
-    new Collectors {
+    new Collectors with TracerAccess {
+
+      val tracer = asys.actorOf(
+        Props(new Tracer),
+        name = "tracking"
+      )
 
       private val updater = asys.actorOf(
         Props(new Updater(ded, places)),
@@ -235,6 +244,23 @@ class CollectionModule extends Module {
         Await.result(child, 2.seconds)
       }
     }
+  }
+
+  @Provides
+  def statsAccess(
+    coll: Collectors,
+    asys: ActorSystem
+  ): TrackStatsAccess = new TrackStatsAccess {
+    val tacc = coll.asInstanceOf[TracerAccess]
+    implicit def ec: ExecutionContext = asys.dispatcher
+
+    import akka.pattern.ask
+    import scala.concurrent.duration._
+
+    implicit val timeout: Timeout = 10.seconds
+
+    override def progress = (tacc.tracer ? Tracer.Progress).mapTo[ProgressInfo]
+    override def histogram(key: String) = (tacc.tracer ? Tracer.Histogram(key)).mapTo[ReplyHistogram]
   }
 
 }

@@ -13,7 +13,7 @@ import org.slf4j.LoggerFactory
 import play.api.{Configuration, Environment}
 
 import scala.collection.mutable.ArrayBuffer
-import scala.concurrent.ExecutionContext
+import scala.concurrent.{ExecutionContext, Future}
 import scala.util.Random
 
 /**
@@ -28,7 +28,7 @@ case class HostConfig(hosts: Seq[String], executorConfig: AllExecutorsConfig) {
   def useJavaAt(host: String) = executorConfig.useJava(host)
 }
 
-case class CollectionInstArgs(hostname: String, port: Int, label: String)
+case class CollectionInstArgs(hostname: String, port: Int, mark: String)
 
 class CollectionTarget(val key: String, host: HostConfig, val target: TargetPattern) {
   def makeArgs(args: CollectionInstArgs, hostname: String): Seq[String] = {
@@ -36,7 +36,7 @@ class CollectionTarget(val key: String, host: HostConfig, val target: TargetPatt
     host.appendArgs(res, hostname)
     res += args.hostname
     res += args.port.toString
-    res += args.label
+    res += args.mark
     res += target.prefix
     res
   }
@@ -201,7 +201,7 @@ object CollectionRegistry {
 
 
 trait CollectionArgsSpawner {
-  def create(): CollectionInstArgs
+  def create()(implicit ec: ExecutionContext): Future[CollectionInstArgs]
 }
 
 class HostModule extends Module {
@@ -231,10 +231,12 @@ class HostModule extends Module {
   ): CollectionArgsSpawner = new CollectionArgsSpawner {
     val id = new AtomicInteger(0)
 
-    override def create() = {
+    override def create()(implicit ec: ExecutionContext) = {
       val runId = id.getAndIncrement() & 0xffff
       val time = (System.nanoTime() >> 14) & 0xffff
-      new CollectionInstArgs(is.addr.getHostName, is.addr.getPort, f"$runId%x_$time%x")
+      is.addr.map { addr =>
+        new CollectionInstArgs(addr.getHostName, addr.getPort, f"$runId%x_$time%x")
+      }
     }
   }
 

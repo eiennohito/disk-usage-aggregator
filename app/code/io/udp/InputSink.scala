@@ -3,10 +3,11 @@ package code.io.udp
 import java.net.{InetAddress, InetSocketAddress}
 
 import akka.actor.{ActorRef, ActorSystem, Props}
+import code.io.tcp.TcpInput
 import com.google.inject._
 import play.api.Configuration
 
-import scala.concurrent.{Await, Promise}
+import scala.concurrent.{Future, Promise}
 
 /**
   * @author eiennohito
@@ -16,21 +17,17 @@ import scala.concurrent.{Await, Promise}
 trait InfoSink {
   def hostname: String
   def port: Int
-  def addr: InetSocketAddress
+  def addr: Future[InetSocketAddress]
   def actor: ActorRef
 }
 
-
-case class InfoSinkImpl(hostname: String, port: Int, addr: InetSocketAddress, actor: ActorRef) extends InfoSink
+case class InfoSinkImpl(hostname: String, port: Int, addr: Future[InetSocketAddress], actor: ActorRef) extends InfoSink
 
 
 class InfoSinkModule extends Module {
   override def configure(binder: Binder) = {
     binder.bind(classOf[InfoSink]).to(classOf[InfoSinkImpl]).asEagerSingleton()
   }
-
-  import akka.pattern.ask
-  import scala.concurrent.duration._
 
   @Provides
   @Singleton
@@ -40,9 +37,8 @@ class InfoSinkModule extends Module {
   ): InfoSinkImpl = {
     val port = cfg.getInt("my.port").getOrElse(0)
     val hostname = cfg.getString("my.hostname").getOrElse(InetAddress.getLocalHost.getHostAddress)
-    val aref = asys.actorOf(Props(new UdpInput(hostname, port)))
-    val fut = aref.ask(UdpInput.AddressQuery)(10.seconds).mapTo[InetSocketAddress]
-    val addr = Await.result(fut, 10.seconds)
-    new InfoSinkImpl(hostname, port, addr, aref)
+    val addr = Promise[InetSocketAddress]
+    val aref = asys.actorOf(Props(new TcpInput(hostname, port, addr)))
+    new InfoSinkImpl(hostname, port, addr.future, aref)
   }
 }

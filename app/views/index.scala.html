@@ -7,6 +7,10 @@
   dtf.print(dt)
 }
 
+@percentage(a: Double) = {
+  <span>@{Math.round(a * 100)}</span>
+}
+
 @main("Usage: Control Panel") {
   <p>This is the collector status (sort of).
     You are probably more interested in
@@ -16,25 +20,55 @@
   <p>Registered targets:</p>
   <ul>
 
+    <table class="table">
+      <thead>
+        <tr>
+          <td></td>
+          <td>Update</td>
+          <td>Next</td>
+          <td>Pattern</td>
+          <td>Hosts</td>
+          <td>%</td>
+        </tr>
+      </thead>
     @for(i <- items) {
-      <li>
-        <a href="@routes.Application.reload(i.key)">
-          R
-        </a>
-        [@i.hosts.mkString(",")]: @i.pattern
-        Last Update: @{
-          i.lastDate match {
-            case Some(s) => asd(s)
-            case None => ""
+        <tr>
+          <td>
+            <a href="@routes.Application.reload(i.key)"><span class="glyphicon glyphicon-refresh"></span> </a>
+          </td>
+          <td>
+          @{
+            i.lastDate match {
+              case Some(s) => asd(s)
+              case None => ""
+            }
           }
-        };
-        Next Update: @{
-          i.nextDate match {
-            case Some(s) => asd(s)
-            case None => ""
+          </td>
+          <td>
+          @{
+            i.nextDate match {
+              case Some(s) => asd(s)
+              case None => ""
+            }
           }
-        }
-      </li>
+          </td>
+          <td>@i.pattern</td>
+          <td>[@i.hosts.mkString(",")]</td>
+          <td>
+            @{
+              i.progress match {
+                case Some(p) =>
+                  if (p.progress >= 0.99) "Done"
+                  else percentage(p.progress)
+                case None => ""
+              }
+            }
+          </td>
+          <td>
+            <a href="@routes.Application.hist(i.key)"><span class="glyphicon glyphicon-align-left"></span> </a>
+          </td>
+        </tr>
     }
+    </table>
   </ul>
 }

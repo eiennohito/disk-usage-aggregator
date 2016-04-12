@@ -3,34 +3,58 @@ package controllers
 import javax.inject.Inject
 
 import code.collection._
+import code.tracing.{CollectionProgress, ProgressInfo, TrackStatsAccess}
 import org.joda.time.{DateTime, Duration}
 import play.api._
 import play.api.mvc._
+
+import scala.concurrent.ExecutionContext
 
 class Application @Inject()(
   registry: CollectionRegistry,
   cts: CollectionTasksService,
   skd: SavedKeyDAO,
   ded: DirectoryEntryDao,
-  space: PlaceTotalDao
+  space: PlaceTotalDao,
+  sacc: TrackStatsAccess,
+  ec: ExecutionContext
 ) extends Controller {
+  implicit def exc = ec
 
-  def index = Action {
+
+  def index = Action.async {
     val items = registry.items
     val all = skd.all()
     val mx = all.map {i => i.id -> i }.toMap
-    val data = items.map { i =>
-      val o = mx.get(i.key)
-      HostStatus(
-        i.key,
-        i.hosts,
-        i.pattern,
-        o.map(_.lastUpdate),
-        o.map(x => Duration.millis(x.duration)),
-        o.map(_.updDate)
-      )
+    sacc.progress.map { progress =>
+      val data = items.map { i =>
+        val o = mx.get(i.key)
+        HostStatus(
+          i.key,
+          i.hosts,
+          i.pattern,
+          o.map(_.lastUpdate),
+          o.map(x => Duration.millis(x.duration)),
+          o.map(_.updDate),
+          progress.data.get(i.key)
+        )
+      }
+      Ok(views.html.index(data))
     }
-    Ok(views.html.index(data))
+  }
+
+  def hist(key: String) = Action.async {
+    sacc.histogram(key).map { v =>
+      v.hist match {
+        case None => Ok("This was not analyzed")
+        case Some(h) =>
+          import scala.collection.JavaConverters._
+          val iter = h.logarithmicBucketValues(100, 2.0).iterator().asScala
+
+          val data = iter.map { v => PercentileUnit(v.getPercentileLevelIteratedTo, v.getCountAddedInThisIterationStep, v.getValueIteratedTo) }
+          Ok(views.html.hist(Percentiles(data.toSeq, key)))
+      }
+    }
   }
 
   def reload(key: String) = Action {
@@ -69,5 +93,8 @@ class Application @Inject()(
 
 case class PlaceStats(name: String, total: Long, used: Long, usedFs: Long, updDate: Option[DateTime])
 case class HostStatus(key: String, hosts: Seq[String], pattern: String,
-  lastDate: Option[DateTime], lastEplaced: Option[Duration], nextDate: Option[DateTime]
+  lastDate: Option[DateTime], lastEplaced: Option[Duration], nextDate: Option[DateTime], progress: Option[CollectionProgress]
 )
+
+case class PercentileUnit(percentile: Double, count: Long, value: Long)
+case class Percentiles(units: Seq[PercentileUnit], key: String)

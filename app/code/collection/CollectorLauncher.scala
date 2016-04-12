@@ -16,6 +16,7 @@ import org.joda.time.{DateTime, Duration}
 import play.api.{Configuration, Environment}
 
 import scala.collection.mutable
+import scala.concurrent.Future
 import scala.concurrent.duration.FiniteDuration
 
 /**
@@ -27,6 +28,7 @@ case class CollectionStatus(
   target: CollectionTarget,
   process: Process,
   host: String,
+  args: CollectionInstArgs,
   actor: ActorRef,
   startTime: DateTime = DateTime.now()
 )
@@ -44,12 +46,14 @@ class CollectorLauncher (
   implicit def ec = context.dispatcher
 
   case object Tick
-  case class Mark(trg: Seq[CollectionTarget])
+  case class Append(trg: Seq[CollectionStatus])
 
   context.system.scheduler.schedule(5.seconds, inteval, self, Tick)
 
 
   var running: Seq[CollectionStatus] = Nil
+
+  import akka.pattern.pipe
 
   override def receive = {
     case Tick =>
@@ -61,36 +65,41 @@ class CollectorLauncher (
         val ignore = running.map(_.target).toSet
         val available = tasks.request(cnt, ignore)
         log.debug(s"$cnt slots available, running ${available.size} items")
-        val launched = available.flatMap { req =>
-          val collectionArgs = cas.create()
+
+        val toLaunch = available.flatMap { req =>
           val host = req.selectHostname()
           if (hosts.contains(host)) {
             tasks.makeWait(req, 5.minutes)
             Nil
           } else {
-            val aref = collectors.makeCollector(Collection.MakeCollector(collectionArgs.label, req))
-            hosts += host
-            CollectionStatus(req, executor.launch(req, collectionArgs, host), host, aref) :: Nil
+            val args = cas.create()
+            val f = args.map { collectionArgs =>
+              val aref = collectors.makeCollector(Collection.MakeCollector(collectionArgs.mark, req))
+              val proc = executor.launch(req, collectionArgs, host)
+              CollectionStatus(req, proc, host, collectionArgs, aref)
+            }
+            f :: Nil
           }
         }
-        self ! Mark(available)
-        running = alive ++ launched
+
+        val data = Future.sequence(toLaunch)
+        data.map(x => Append(x)).pipeTo(self)
+
+        running = alive
       } else {
         running = alive
       }
 
-      tasks.mark(dead)
-      dead.foreach(_.actor ! Collection.CollectionFinished)
+      tasks.markFinish(dead)
+      dead.foreach(x => x.actor ! Collection.CollectionFinished(x.args.mark))
+    case Append(launched) =>
+      running ++= launched
   }
 
   @throws[Exception](classOf[Exception])
   override def postStop() = {
     running.map(_.process).foreach(_.destroy())
   }
-}
-
-trait CollectionData {
-
 }
 
 case class SavedKey(
@@ -189,11 +198,11 @@ class CollectionTasksService @Inject() (
 
   val scanTTL = conf.getMilliseconds("aggregator.collection.scan-ttl").getOrElse(1000 * 60 * 60 * 24L)
 
-  def mark(target: Seq[CollectionStatus]) = {
-    val dur = org.joda.time.Duration.millis(scanTTL)
+  def markFinish(target: Seq[CollectionStatus]) = {
+    val updateInterval = org.joda.time.Duration.millis(scanTTL)
     val now = DateTime.now()
-    val upDate = now.plus(dur)
-    val keys = target.map(x => (x.target.key, upDate, now.getMillis - x.startTime.getMillis))
+    val nextUpdate = now.plus(updateInterval)
+    val keys = target.map(x => (x.target.key, nextUpdate, now.getMillis - x.startTime.getMillis))
     val update = keys.map { case (a, b, c) => a -> b}.toMap
     synchronized {
       stored = stored ++ update

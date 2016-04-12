@@ -2,10 +2,10 @@ package org.eiennohito;
 
 import java.io.Closeable;
 import java.io.IOException;
-import java.net.DatagramPacket;
-import java.net.DatagramSocket;
-import java.net.InetSocketAddress;
+import java.net.*;
 import java.nio.ByteBuffer;
+import java.nio.ByteOrder;
+import java.nio.channels.SocketChannel;
 import java.nio.file.*;
 import java.nio.file.attribute.*;
 import java.util.concurrent.BlockingQueue;
@@ -22,7 +22,7 @@ public class CollectorInstance implements Closeable {
   private final String mark;
   private final Path target;
 
-  public static final int MESSAGE_SIZE = 16000;
+  public static final int MESSAGE_SIZE = 8000;
   public static final int BUFFER_SIZE = 4000;
 
   public CollectorInstance(InetSocketAddress isa, String mark, Path target) {
@@ -33,8 +33,8 @@ public class CollectorInstance implements Closeable {
 
 
   public void doWork() throws IOException {
-    try (DatagramSocket socket = new DatagramSocket()) {
-      Sender sndr = new Sender(socket, isa);
+    try (SocketChannel channel = SocketChannel.open(isa)) {
+      Sender sndr = new Sender(channel, isa);
       AtomicLong cntr = new AtomicLong(1L);
       MessageFormatter fmtr = new MessageFormatter(sndr, BUFFER_SIZE, MESSAGE_SIZE, mark);
 
@@ -55,19 +55,19 @@ public class CollectorInstance implements Closeable {
 
 
   private static class SendRequest {
-    private final DatagramPacket packet;
+    private final ByteBuffer packet;
 
-    public SendRequest(DatagramPacket packet) {
+    public SendRequest(ByteBuffer packet) {
       this.packet = packet;
     }
 
-    public DatagramPacket getPacket() {
+    public ByteBuffer getPacket() {
       return packet;
     }
   }
 
   private static class Sender implements MessageSender {
-    private final DatagramSocket socket;
+    private final SocketChannel socket;
     private final InetSocketAddress remote;
 
     private final BlockingQueue<SendRequest> requests = new LinkedBlockingQueue<>();
@@ -75,12 +75,20 @@ public class CollectorInstance implements Closeable {
     private final Thread sendThread = new Thread(new Runnable() {
       @Override
       public void run() {
+        ByteBuffer rcvBuf = ByteBuffer.allocate(10);
         while (true) {
           try {
             SendRequest poll = requests.take();
-            DatagramPacket packet = poll.getPacket();
+            ByteBuffer packet = poll.getPacket();
             if (packet != null) {
-              socket.send(packet);
+              writePacket(packet);
+              rcvBuf.clear();
+              rcvBuf.limit(4);
+              //socket.read(rcvBuf);
+              //rcvBuf.flip();
+              long number = CollectorAgent.sentPackets.getAndIncrement();
+              int answer = rcvBuf.getInt(0);
+              System.out.println("sent #" + number + " recv #" + answer);
             } else {
               return;
             }
@@ -91,9 +99,20 @@ public class CollectorInstance implements Closeable {
           }
         }
       }
+
+      private void writePacket(ByteBuffer packet) throws IOException, InterruptedException {
+        int remaining = packet.remaining();
+        while (remaining > 0) {
+          int written = socket.write(packet);
+          remaining -= written;
+          if (written == 0) {
+            this.wait(1000);
+          }
+        }
+      }
     });
 
-    Sender(DatagramSocket socket, InetSocketAddress remote) {
+    Sender(SocketChannel socket, InetSocketAddress remote) {
       this.socket = socket;
       this.remote = remote;
       sendThread.setDaemon(true);
@@ -102,10 +121,13 @@ public class CollectorInstance implements Closeable {
 
     @Override
     public void sendBuffer(ByteBuffer buf) throws IOException {
-      byte[] copy = new byte[buf.remaining()];
-      buf.get(copy);
-      DatagramPacket packet = new DatagramPacket(copy, 0, copy.length, remote);
-      send(packet);
+      int size = buf.remaining();
+      ByteBuffer copy = ByteBuffer.allocate(size + 4);
+      copy.order(ByteOrder.BIG_ENDIAN);
+      copy.putInt(size);
+      copy.put(buf);
+      copy.flip();
+      send(copy);
     }
 
     public void finish() throws InterruptedException {
@@ -113,9 +135,10 @@ public class CollectorInstance implements Closeable {
       sendThread.join();
     }
 
-    public void send(DatagramPacket packet) {
+    public void send(ByteBuffer packet) {
       if (packet != null) {
         requests.add(new SendRequest(packet));
+        CollectorAgent.putPackets.incrementAndGet();
       }
     }
   }

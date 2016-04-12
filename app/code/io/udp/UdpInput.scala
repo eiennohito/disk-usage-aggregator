@@ -2,9 +2,10 @@ package code.io.udp
 
 import java.net.InetSocketAddress
 
-import akka.actor.{Terminated, ActorLogging, ActorRef, Actor}
-import akka.io.{Udp, IO}
+import akka.actor.{Actor, ActorLogging, ActorRef, Terminated}
+import akka.io.{IO, Udp}
 import akka.util.ByteString
+import code.io.Input
 
 import scala.collection.mutable.ArrayBuffer
 import scala.concurrent.Promise
@@ -34,10 +35,10 @@ class UdpInput(hostname: String, port: Int) extends Actor with ActorLogging {
         q ! boundAddress
       }
       queries = Nil
-    case UdpInput.Register =>
+    case Input.Register =>
       sink = sender()
       context.watch(sink)
-    case UdpInput.AddressQuery =>
+    case Input.AddressQuery =>
       if (boundAddress != null) {
         sender() ! boundAddress
       } else {
@@ -50,11 +51,11 @@ class UdpInput(hostname: String, port: Int) extends Actor with ActorLogging {
   val savedInput = new ArrayBuffer[ByteString]()
 
   def ready(socket: ActorRef): Receive = {
-    case UdpInput.Register =>
+    case Input.Register =>
       sink = sender()
       savedInput.foreach(sink ! _)
       savedInput.clear()
-    case UdpInput.AddressQuery =>
+    case Input.AddressQuery =>
       sender() ! boundAddress
     case Udp.Received(data, who) => //data
       if (sink != null) {
@@ -77,9 +78,4 @@ class UdpInput(hostname: String, port: Int) extends Actor with ActorLogging {
       sock ! Udp.Unbind
     }
   }
-}
-
-object UdpInput {
-  case object Register
-  case object AddressQuery
 }

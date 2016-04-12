@@ -1,6 +1,7 @@
 package code.collection
 
 import akka.actor.{Actor, ActorLogging, ActorRef}
+import code.tracing.{Tracer, TrackingApi}
 import org.joda.time.DateTime
 
 import scala.collection.mutable
@@ -9,7 +10,7 @@ import scala.collection.mutable
   * @author eiennohito
   * @since 2016/02/19
   */
-class Collector(mark: String, ct: CollectionTarget, updater: ActorRef) extends Actor with ActorLogging {
+class Collector(mark: String, ct: CollectionTarget, updater: ActorRef) extends Actor with ActorLogging with TrackingApi {
   private val dirs = new mutable.HashMap[Long, DirectoryInformation]()
   dirs.put(0L, DirectoryInformation(ct.target.prefix, 0L, null, 0, 0))
 
@@ -22,6 +23,8 @@ class Collector(mark: String, ct: CollectionTarget, updater: ActorRef) extends A
       e match {
         case x: DeviceStat =>
           val msg = Updater.UpdateTotals(ct.key, x.total, x.used)
+          log.debug("message for totals: total={} used={}", x.total, x.used)
+          trace(msg)
           updater ! msg
         case x: DirectoryDown =>
           dirs.get(x.parent) match {
@@ -33,6 +36,7 @@ class Collector(mark: String, ct: CollectionTarget, updater: ActorRef) extends A
         case x: DirectoryUp =>
           dirs.get(x.id) match {
             case Some(de) =>
+              trace(Tracer.UpWalk(ct, de, x))
               if (de.level == 2) {
                 val msg = Updater.UpdateStats(
                   ct.key,
@@ -53,9 +57,9 @@ class Collector(mark: String, ct: CollectionTarget, updater: ActorRef) extends A
 
   override def receive = {
     case CollectionMessage(_, events) => processEvents(events)
-    case Collection.CollectionFinished =>
+    case x: Collection.CollectionFinished =>
       updater ! Updater.CleanOld(ct.key, collectionStart)
-      context.parent ! Collection.CollectionFinished
+      context.parent ! x
   }
 }
 
