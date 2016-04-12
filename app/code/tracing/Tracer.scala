@@ -84,6 +84,8 @@ class Tracer extends Actor with ActorLogging {
     }
   }
 
+  val millisInMonth = 1000 * 60 * 60 * 24 * 31
+
   def formatStats() = {
     val objs = instances.map { case (k, v) =>
       val progress = v.collected.toDouble / v.used
@@ -91,7 +93,11 @@ class Tracer extends Actor with ActorLogging {
       val eplaced = System.currentTimeMillis() - start.getMillis
       val speed = v.collected / eplaced.toDouble
       val willTake = speed * v.used
-      val endTime = start.plus(org.joda.time.Duration.millis(willTake.toLong))
+      val endTime = if (willTake <  millisInMonth) {
+        start.plus(org.joda.time.Duration.millis(willTake.toLong))
+      } else {
+        start.plus(millisInMonth)
+      }
       k -> CollectionProgress(start, progress, endTime)
     }
 
