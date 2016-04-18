@@ -72,6 +72,7 @@ class CollectorLauncher (
             tasks.makeWait(req, 5.minutes)
             Nil
           } else {
+            hosts += host
             val args = cas.create()
             val f = args.map { collectionArgs =>
               val aref = collectors.makeCollector(Collection.MakeCollector(collectionArgs.mark, req))
