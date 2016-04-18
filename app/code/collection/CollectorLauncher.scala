@@ -99,7 +99,12 @@ class CollectorLauncher (
 
   @throws[Exception](classOf[Exception])
   override def postStop() = {
-    running.map(_.process).foreach(_.destroy())
+    running.map(_.process).foreach { p =>
+      val stream = p.getOutputStream
+      stream.write(1)
+      stream.flush()
+      p.destroy()
+    }
   }
 }
 
