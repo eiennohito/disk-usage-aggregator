@@ -44,6 +44,8 @@ public class CollectorInstance implements Closeable {
       FileStore store = Files.getFileStore(target);
       fmtr.appendOverall(store.getTotalSpace(), store.getTotalSpace() - store.getUsableSpace());
 
+      fmtr.flush();
+
       targetStep.process(fmtr);
 
       fmtr.flush();
