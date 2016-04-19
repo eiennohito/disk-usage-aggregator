@@ -58,7 +58,7 @@ class Collector(mark: String, ct: CollectionTarget, updater: ActorRef) extends A
   override def receive = {
     case CollectionMessage(_, events) => processEvents(events)
     case x: Collection.CollectionFinished =>
-      updater ! Updater.CleanOld(ct.key, collectionStart.minusDays(10))
+      updater ! Updater.CleanOld(ct.key, collectionStart.minusHours(1))
       context.parent ! x
   }
 }
