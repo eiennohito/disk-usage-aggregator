@@ -85,18 +85,18 @@ class CollectorLauncher (
           }
         }
 
-        val data = Future.sequence(toLaunch)
-        data.map(x => Append(x)).pipeTo(self)
-
-        running = alive
-      } else {
-        running = alive
+        if (toLaunch.nonEmpty) {
+          val data = Future.sequence(toLaunch)
+          data.map(x => Append(x)).pipeTo(self)
+        }
       }
+
+      running = alive
 
       tasks.markFinish(dead)
       dead.foreach(x => x.actor ! Collection.CollectionFinished(x.args.mark))
       if (dead.nonEmpty) {
-        log.debug("{} collectors finished")
+        log.debug("{} collectors finished", dead.size)
       }
     case Append(launched) =>
       running ++= launched
