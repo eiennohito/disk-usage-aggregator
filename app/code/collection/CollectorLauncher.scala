@@ -64,7 +64,9 @@ class CollectorLauncher (
       if (cnt > 0) {
         val ignore = running.map(_.target).toSet
         val available = tasks.request(cnt, ignore)
-        log.debug(s"$cnt slots available, running ${available.size} items")
+        if (available.nonEmpty) {
+          log.debug("{} slots available, trying to launch {} collectors for {}", cnt, available.size, available.map(_.key).mkString("[", ", ", "]"))
+        }
 
         val toLaunch = available.flatMap { req =>
           val host = req.selectHostname()
@@ -93,8 +95,12 @@ class CollectorLauncher (
 
       tasks.markFinish(dead)
       dead.foreach(x => x.actor ! Collection.CollectionFinished(x.args.mark))
+      if (dead.nonEmpty) {
+        log.debug("{} collectors finished")
+      }
     case Append(launched) =>
       running ++= launched
+      log.info("launched {} collectors", launched.size)
   }
 
   @throws[Exception](classOf[Exception])

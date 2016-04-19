@@ -93,7 +93,7 @@ class ProcessLauncher(pythonScript: File, executor: ExecutionContext) extends St
           val isr = new BufferedReader(new InputStreamReader(input, "utf-8"))
           var line = isr.readLine() //blocks
           while (line != null) {
-            logger.info(s"$line")
+            logger.info(line)
             line = isr.readLine() //blocks
           }
         } catch {
