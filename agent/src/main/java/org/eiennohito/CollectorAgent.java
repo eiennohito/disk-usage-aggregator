@@ -18,7 +18,8 @@ public class CollectorAgent {
   public static void main(String[] arg) throws IOException {
     Worker w = new Worker(arg);
     Thread t = new Thread(w, "worker");
-    t.run();
+    t.setDaemon(true);
+    t.start();
 
     int something = System.in.read();
     System.out.println("Somebody have written to stdout, terminate");

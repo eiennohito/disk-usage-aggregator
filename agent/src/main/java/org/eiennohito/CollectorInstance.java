@@ -66,7 +66,8 @@ public class CollectorInstance implements Closeable {
         success = true;
         break;
       } else {
-        this.wait(1000); //wait 1 sec for folder to mount
+        //wait 1 sec for folder to mount
+        Thread.currentThread().wait(1000);
       }
     }
     return success;
