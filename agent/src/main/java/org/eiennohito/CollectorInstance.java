@@ -49,7 +49,7 @@ public class CollectorInstance implements Closeable {
       String msg = topLevel.stream().reduce("", (a, b) -> a + ", " + b);
       System.err.println("top level dirs: " + msg);
 
-      if (getTotalSpace(fmtr)) {
+      if (getTotalSpace(fmtr, 10)) {
         fmtr.flush();
       } else {
         System.err.println("can't get space stats after 10 tries");
@@ -79,10 +79,10 @@ public class CollectorInstance implements Closeable {
     }
   }
 
-  private boolean getTotalSpace(MessageFormatter fmtr) throws IOException, InterruptedException {
+  private boolean getTotalSpace(MessageFormatter fmtr, int tries) throws IOException, InterruptedException {
     boolean success = false;
 
-    for (int i = 0; i < 10; ++i) {
+    for (int i = 0; i < tries; ++i) {
       FileStore store = Files.getFileStore(target);
       if (store.getTotalSpace() != 0) {
         fmtr.appendOverall(store.getTotalSpace(), store.getTotalSpace() - store.getUsableSpace());
