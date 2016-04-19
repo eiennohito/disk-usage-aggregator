@@ -41,10 +41,11 @@ public class CollectorInstance implements Closeable {
       PosixFileAttributes targetAttrs = Files.readAttributes(target, PosixFileAttributes.class, LinkOption.NOFOLLOW_LINKS);
       ProcessingStep targetStep = new ProcessingStep(target, targetAttrs, cntr, PARENT_ID);
 
-      FileStore store = Files.getFileStore(target);
-      fmtr.appendOverall(store.getTotalSpace(), store.getTotalSpace() - store.getUsableSpace());
-
-      fmtr.flush();
+      if (getTotalSpace(fmtr)) {
+        fmtr.flush();
+      } else {
+        System.err.println("can't get space stats after 10 tries");
+      }
 
       targetStep.process(fmtr);
 
@@ -53,6 +54,22 @@ public class CollectorInstance implements Closeable {
     } catch (InterruptedException e) {
       e.printStackTrace(System.err);
     }
+  }
+
+  private boolean getTotalSpace(MessageFormatter fmtr) throws IOException, InterruptedException {
+    boolean success = false;
+
+    for (int i = 0; i < 10; ++i) {
+      FileStore store = Files.getFileStore(target);
+      if (store.getTotalSpace() != 0) {
+        fmtr.appendOverall(store.getTotalSpace(), store.getTotalSpace() - store.getUsableSpace());
+        success = true;
+        break;
+      } else {
+        this.wait(1000); //wait 1 sec for folder to mount
+      }
+    }
+    return success;
   }
 
 
