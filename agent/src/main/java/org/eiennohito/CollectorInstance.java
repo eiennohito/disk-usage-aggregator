@@ -8,9 +8,13 @@ import java.nio.ByteOrder;
 import java.nio.channels.SocketChannel;
 import java.nio.file.*;
 import java.nio.file.attribute.*;
+import java.util.ArrayList;
+import java.util.Iterator;
+import java.util.List;
 import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.LinkedBlockingQueue;
 import java.util.concurrent.atomic.AtomicLong;
+import java.util.stream.Collectors;
 
 /**
  * @author eiennohito
@@ -41,6 +45,10 @@ public class CollectorInstance implements Closeable {
       PosixFileAttributes targetAttrs = Files.readAttributes(target, PosixFileAttributes.class, LinkOption.NOFOLLOW_LINKS);
       ProcessingStep targetStep = new ProcessingStep(target, targetAttrs, cntr, PARENT_ID);
 
+      List<String> topLevel = listTopLevel(target);
+      String msg = topLevel.stream().reduce("", (a, b) -> a + ", " + b);
+      System.err.println("top level dirs: " + msg);
+
       if (getTotalSpace(fmtr)) {
         fmtr.flush();
       } else {
@@ -53,6 +61,21 @@ public class CollectorInstance implements Closeable {
       sndr.finish();
     } catch (InterruptedException e) {
       e.printStackTrace(System.err);
+    }
+  }
+
+  private List<String> listTopLevel(Path p) throws IOException {
+    try (DirectoryStream<Path> ds = Files.newDirectoryStream(p)) {
+      Iterator<Path> iter = ds.iterator();
+      List<String> res = new ArrayList<>();
+      while (iter.hasNext()) {
+        Path di = iter.next();
+        BasicFileAttributes attrs = Files.readAttributes(di, BasicFileAttributes.class, LinkOption.NOFOLLOW_LINKS);
+        if (attrs.isDirectory()) {
+          res.add(di.getFileName().toString());
+        }
+      }
+      return res;
     }
   }
 
